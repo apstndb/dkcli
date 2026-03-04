@@ -67,6 +67,19 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 			sb.WriteString(txtarEntry(doc.Name, doc.Content))
 		}
 		return printText(sb.String())
+	case "jsonl":
+		w, closer, err := outWriter()
+		if err != nil {
+			return err
+		}
+		defer closer()
+		enc := json.NewEncoder(w)
+		for _, doc := range resp.Documents {
+			if err := enc.Encode(doc); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
 		return printFormatted(resp)
 	}

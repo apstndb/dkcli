@@ -46,6 +46,58 @@ type searchResponse struct {
 	NextPageToken string          `json:"nextPageToken,omitempty" yaml:"nextPageToken,omitempty"`
 }
 
+// runSearchJSONL streams search results as JSONL, writing each chunk
+// immediately as pages are fetched rather than buffering all results.
+func runSearchJSONL(apiKey, query string) error {
+	w, closer, err := outWriter()
+	if err != nil {
+		return err
+	}
+	defer closer()
+
+	enc := json.NewEncoder(w)
+	token := pageToken
+	pages := 0
+	total := 0
+	start := time.Now()
+	var lastNextPageToken string
+
+	for {
+		resp, err := fetchSearchPage(apiKey, query, token)
+		if err != nil {
+			return err
+		}
+		pages++
+
+		for _, chunk := range resp.Results {
+			if err := enc.Encode(chunk); err != nil {
+				return err
+			}
+		}
+		total += len(resp.Results)
+		lastNextPageToken = resp.NextPageToken
+
+		if !autoPaging || resp.NextPageToken == "" {
+			break
+		}
+		if maxPages > 0 && pages >= maxPages {
+			fmt.Fprintf(os.Stderr, "WARNING: reached max pages (%d), use --max-pages to increase\n", maxPages)
+			break
+		}
+		token = resp.NextPageToken
+	}
+
+	if autoPaging {
+		fmt.Fprintf(os.Stderr, "Fetched %d pages (%d results) in %v\n", pages, total, time.Since(start).Truncate(time.Millisecond))
+	}
+
+	if lastNextPageToken != "" {
+		fmt.Fprintf(os.Stderr, "Next page token: %s\n", lastNextPageToken)
+	}
+
+	return nil
+}
+
 func fetchSearchPage(apiKey, query, token string) (*searchResponse, error) {
 	params := url.Values{}
 	params.Set("query", query)
@@ -80,6 +132,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	query := strings.Join(args, " ")
+
+	if outputFormat == "jsonl" {
+		return runSearchJSONL(apiKey, query)
+	}
 
 	var allResults searchResponse
 	token := pageToken

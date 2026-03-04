@@ -41,7 +41,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "text", "output format (text, json, yaml, txtar)")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "format", "f", "text", "output format (text, json, jsonl, yaml, txtar)")
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "write output to file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "dump response headers to stderr")
 	rootCmd.SilenceUsage = true
@@ -201,6 +201,8 @@ func printFormatted(v any) error {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(v)
+	case "jsonl":
+		return json.NewEncoder(w).Encode(v)
 	case "yaml":
 		return yaml.NewEncoder(w).Encode(v)
 	default:
