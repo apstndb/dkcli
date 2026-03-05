@@ -65,6 +65,20 @@ func getAPIKey() (string, error) {
 	return "", fmt.Errorf("set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY")
 }
 
+// apiError represents a non-OK HTTP response from the API.
+type apiError struct {
+	Code    int
+	Status  string
+	Message string
+}
+
+func (e *apiError) Error() string {
+	if e.Status != "" {
+		return fmt.Sprintf("API error %d (%s): %s", e.Code, e.Status, e.Message)
+	}
+	return fmt.Sprintf("HTTP %d: %s", e.Code, e.Message)
+}
+
 // rateLimitError is returned when the API responds with HTTP 429.
 type rateLimitError struct {
 	RetryAfter time.Duration
@@ -113,9 +127,9 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 			} `json:"error"`
 		}
 		if json.Unmarshal(body, &apiErr) == nil && apiErr.Error.Message != "" {
-			return nil, fmt.Errorf("API error %d (%s): %s", apiErr.Error.Code, apiErr.Error.Status, apiErr.Error.Message)
+			return nil, &apiError{Code: apiErr.Error.Code, Status: apiErr.Error.Status, Message: apiErr.Error.Message}
 		}
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, &apiError{Code: resp.StatusCode, Message: string(body)}
 	}
 
 	return body, nil
