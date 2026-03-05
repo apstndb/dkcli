@@ -50,6 +50,12 @@ dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
 
 ```
 dkcli batch-get docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2
+
+# Write each document as a separate file
+dkcli batch-get --outdir out docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2
+
+# With YAML frontmatter
+dkcli batch-get --outdir out --frontmatter docs.cloud.google.com/path/to/doc1
 ```
 
 ### Create an API key
@@ -67,7 +73,7 @@ dkcli create-api-key
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--format` | `-f` | Output format: `text` (default), `json`, `yaml`, `txtar` |
+| `--format` | `-f` | Output format: `text` (default), `json`, `jsonl`, `yaml`, `txtar` |
 | `--output` | `-o` | Write output to file instead of stdout |
 | `--verbose` | `-v` | Dump response headers to stderr |
 
@@ -87,6 +93,13 @@ dkcli create-api-key
 | Flag | Description |
 |------|-------------|
 | `--frontmatter` | Prepend YAML frontmatter to content |
+
+### `batch-get`
+
+| Flag | Description |
+|------|-------------|
+| `--outdir` | Write each document to a separate file under this directory |
+| `--frontmatter` | Prepend YAML frontmatter to content (text format only) |
 
 ### `create-api-key`
 
