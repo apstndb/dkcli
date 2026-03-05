@@ -13,6 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const batchGetMaxDocs = 20
+
 var (
 	outDir           string
 	batchFrontmatter bool
@@ -20,7 +22,7 @@ var (
 
 var batchGetCmd = &cobra.Command{
 	Use:   "batch-get <document-name>...",
-	Short: "Retrieve multiple documents (max 20)",
+	Short: "Retrieve multiple documents",
 	Args:  cobra.MinimumNArgs(1),
 	RunE:  runBatchGet,
 }
@@ -267,9 +269,22 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		names[i] = normalizeDocName(arg)
 	}
 
-	docs, docErrs, fatal := fetchBatchBisect(apiKey, names)
-	if fatal != nil {
-		return fatal
+	var docs []Document
+	var docErrs []error
+	for i := 0; i < len(names); i += batchGetMaxDocs {
+		end := min(i+batchGetMaxDocs, len(names))
+		chunk := names[i:end]
+
+		if verbose && len(names) > batchGetMaxDocs {
+			fmt.Fprintf(os.Stderr, "Fetching chunk %d-%d of %d documents...\n", i+1, end, len(names))
+		}
+
+		d, e, fatal := fetchBatchBisect(apiKey, chunk)
+		if fatal != nil {
+			return fatal
+		}
+		docs = append(docs, d...)
+		docErrs = append(docErrs, e...)
 	}
 
 	// All documents failed.
