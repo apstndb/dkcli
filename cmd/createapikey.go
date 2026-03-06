@@ -17,17 +17,35 @@ import (
 var (
 	projectID   string
 	displayName string
+	keyOnly     bool
 )
 
 var createAPIKeyCmd = &cobra.Command{
 	Use:   "create-api-key",
 	Short: "Create an API key restricted to Developer Knowledge API",
-	RunE:  runCreateAPIKey,
+	Long: `Create a Google API key restricted to the Developer Knowledge API.
+
+The key is created under the specified Google Cloud project and scoped
+to developerknowledge.googleapis.com only. You need application default
+credentials (run 'gcloud auth application-default login' first).`,
+	Example: `  # Create an API key
+  dkcli create-api-key --project my-project
+
+  # Create and set in current shell
+  export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p my-project --key-only)
+
+  # Persist in shell profile (review before sourcing)
+  echo "export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p my-project --key-only)" >> ~/.zshrc
+
+  # View full key details as JSON
+  dkcli create-api-key -p my-project -f json`,
+	RunE: runCreateAPIKey,
 }
 
 func init() {
 	createAPIKeyCmd.Flags().StringVarP(&projectID, "project", "p", "", "Google Cloud project ID (env: GOOGLE_CLOUD_PROJECT)")
 	createAPIKeyCmd.Flags().StringVarP(&displayName, "display-name", "d", "dkcli", "display name for the API key")
+	createAPIKeyCmd.Flags().BoolVar(&keyOnly, "key-only", false, "print only the API key string (for use in scripts)")
 	rootCmd.AddCommand(createAPIKeyCmd)
 }
 
@@ -190,6 +208,11 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer closer()
+
+	if keyOnly {
+		_, err := fmt.Fprintln(w, ks.KeyString)
+		return err
+	}
 
 	if outputFormat == "txtar" {
 		fmt.Fprintf(os.Stderr, "WARNING: format %q not supported for create-api-key, falling back to text\n", outputFormat)
