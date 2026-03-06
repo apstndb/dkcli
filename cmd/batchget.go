@@ -164,7 +164,16 @@ func formatDocForFile(doc *Document, format string, frontmatter bool) ([]byte, e
 // writeBatchOutdir writes each document as an individual file under dir.
 // Subdirectories are created as needed. Individual write failures are collected
 // and reported as a summary; processing continues on error.
+// After writing, a summary table of document name, path, bytes, and lines is
+// printed to stderr.
 func writeBatchOutdir(docs []Document, dir, format string, frontmatter bool) error {
+	type fileStat struct {
+		name  string
+		path  string
+		bytes int
+		lines int
+	}
+	var stats []fileStat
 	var writeErrs []error
 	for i := range docs {
 		doc := &docs[i]
@@ -186,7 +195,20 @@ func writeBatchOutdir(docs []Document, dir, format string, frontmatter bool) err
 			continue
 		}
 
-		fmt.Fprintf(os.Stderr, "wrote %s\n", path)
+		lines := strings.Count(string(data), "\n")
+		stats = append(stats, fileStat{name: doc.Name, path: path, bytes: len(data), lines: lines})
+	}
+
+	// Print summary.
+	if len(stats) > 0 {
+		totalBytes := 0
+		totalLines := 0
+		for _, s := range stats {
+			fmt.Fprintf(os.Stderr, "%s → %s (%d bytes, %d lines)\n", s.name, s.path, s.bytes, s.lines)
+			totalBytes += s.bytes
+			totalLines += s.lines
+		}
+		fmt.Fprintf(os.Stderr, "total: %d files, %d bytes, %d lines\n", len(stats), totalBytes, totalLines)
 	}
 
 	if len(writeErrs) > 0 {
