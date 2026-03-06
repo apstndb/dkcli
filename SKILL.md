@@ -161,11 +161,13 @@ If dkcli fails with an API key error, suggest:
 | `dkcli search -a <query>` | Search with auto-paging |
 | `dkcli get <doc-name>` | Get a full document |
 | `dkcli batch-get <names>...` | Get multiple documents |
+| `dkcli create-api-key --project <id>` | Create a Developer Knowledge API key |
 
 | Useful flags | |
 |---|---|
 | `-f json\|yaml\|jsonl\|txtar` | Output format (default: text) |
 | `-o <file>` | Write to file |
-| `--page-size N` | Results per page (max 20) |
+| `--page-size N` | Results per page for search (max 20) |
 | `--max-pages N` | Max pages with `-a` (default 5) |
 | `--outdir <dir>` | Write each doc to separate files (batch-get) |
+| `--frontmatter` | Prepend YAML frontmatter to text output (get, batch-get) |
