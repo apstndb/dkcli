@@ -148,10 +148,20 @@ dkcli batch-get -f txtar docs.cloud.google.com/doc1 docs.cloud.google.com/doc2  
 
 ## Error handling
 
-If dkcli fails with an API key error, suggest:
+If dkcli fails with an API key error (`set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY`), suggest:
 
-1. Set the environment variable: `export DEVELOPERKNOWLEDGE_API_KEY=<key>` or `export GOOGLE_API_KEY=<key>`
-2. Or create a new key: `dkcli create-api-key --project <gcp-project-id>`
+```bash
+# Create a key and set it in the current shell (requires gcloud auth application-default login)
+export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p <gcp-project-id> --key-only)
+
+# To persist, append to shell profile
+echo "export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p <gcp-project-id> --key-only)" >> ~/.zshrc
+```
+
+If the user already has a key, they just need to set the environment variable:
+```bash
+export DEVELOPERKNOWLEDGE_API_KEY=<key>
+```
 
 ## Command reference
 
@@ -171,3 +181,4 @@ If dkcli fails with an API key error, suggest:
 | `--max-pages N` | Max pages with `-a` (default 5) |
 | `--outdir <dir>` | Write each doc to separate files (batch-get) |
 | `--frontmatter` | Prepend YAML frontmatter to text output (get, batch-get) |
+| `--key-only` | Print only the API key string (create-api-key) |
