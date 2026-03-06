@@ -58,7 +58,7 @@ func runSearchJSONL(w io.Writer, client *apiClient, query string) error {
 	var lastNextPageToken string
 
 	for {
-		resp, err := client.fetchSearchPage(query, token)
+		resp, err := client.fetchSearchPage(query, pageSize, token)
 		if err != nil {
 			return err
 		}
@@ -93,11 +93,11 @@ func runSearchJSONL(w io.Writer, client *apiClient, query string) error {
 	return nil
 }
 
-func (c *apiClient) fetchSearchPage(query, token string) (*searchResponse, error) {
+func (c *apiClient) fetchSearchPage(query string, size int, token string) (*searchResponse, error) {
 	params := url.Values{}
 	params.Set("query", query)
-	if pageSize > 0 {
-		params.Set("pageSize", strconv.Itoa(pageSize))
+	if size > 0 {
+		params.Set("pageSize", strconv.Itoa(size))
 	}
 	if token != "" {
 		params.Set("pageToken", token)
@@ -145,7 +145,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	start := time.Now()
 
 	for {
-		resp, err := client.fetchSearchPage(query, token)
+		resp, err := client.fetchSearchPage(query, pageSize, token)
 		if err != nil {
 			return err
 		}

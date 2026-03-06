@@ -32,7 +32,7 @@ func TestFetchSearchPage(t *testing.T) {
 		json.NewEncoder(w).Encode(want)
 	}))
 
-	got, err := client.fetchSearchPage("test query", "")
+	got, err := client.fetchSearchPage("test query", 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,23 @@ func TestFetchSearchPage_WithPageToken(t *testing.T) {
 		json.NewEncoder(w).Encode(&searchResponse{})
 	}))
 
-	_, err := client.fetchSearchPage("test", "abc123")
+	_, err := client.fetchSearchPage("test", 0, "abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFetchSearchPage_WithPageSize(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("pageSize"); got != "10" {
+			t.Errorf("pageSize = %q, want %q", got, "10")
+		}
+		json.NewEncoder(w).Encode(&searchResponse{})
+	}))
+
+	_, err := client.fetchSearchPage("test", 10, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +94,7 @@ func TestFetchSearchPage_APIError(t *testing.T) {
 		})
 	}))
 
-	_, err := client.fetchSearchPage("", "")
+	_, err := client.fetchSearchPage("", 0, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
