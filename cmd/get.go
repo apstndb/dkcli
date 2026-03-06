@@ -51,7 +51,7 @@ func formatDocWithFrontmatter(doc *Document) (string, error) {
 	sb.Write(buf)
 	sb.WriteString("---\n")
 	sb.WriteString(doc.Content)
-	if doc.Content != "" && doc.Content[len(doc.Content)-1] != '\n' {
+	if !strings.HasSuffix(doc.Content, "\n") {
 		sb.WriteByte('\n')
 	}
 	return sb.String(), nil
@@ -59,7 +59,7 @@ func formatDocWithFrontmatter(doc *Document) (string, error) {
 
 func formatDocText(doc *Document) string {
 	s := doc.Content
-	if s != "" && s[len(s)-1] != '\n' {
+	if !strings.HasSuffix(s, "\n") {
 		s += "\n"
 	}
 	return s

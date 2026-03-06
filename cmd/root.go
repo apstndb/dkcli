@@ -259,7 +259,7 @@ func txtarEntry(name, content string) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "-- %s --\n", name)
 	sb.WriteString(content)
-	if content != "" && content[len(content)-1] != '\n' {
+	if !strings.HasSuffix(content, "\n") {
 		sb.WriteByte('\n')
 	}
 	return sb.String()

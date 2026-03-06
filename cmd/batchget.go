@@ -243,7 +243,7 @@ func printBatchOutput(docs []Document, format string, frontmatter bool) error {
 				}
 				fmt.Fprintf(&sb, "# %s\n\n", doc.Name)
 				sb.WriteString(doc.Content)
-				if doc.Content != "" && doc.Content[len(doc.Content)-1] != '\n' {
+				if !strings.HasSuffix(doc.Content, "\n") {
 					sb.WriteByte('\n')
 				}
 			}
