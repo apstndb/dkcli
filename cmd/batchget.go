@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -223,8 +224,8 @@ func writeBatchOutdir(docs []Document, dir, format string, frontmatter bool) err
 	return nil
 }
 
-// printBatchOutput writes the documents in the requested output format.
-func printBatchOutput(docs []Document, format string, frontmatter bool) error {
+// printBatchOutput writes the documents in the requested output format to w.
+func printBatchOutput(w io.Writer, docs []Document, format string, frontmatter bool) error {
 	resp := batchGetResponse{Documents: docs}
 
 	switch format {
@@ -250,19 +251,16 @@ func printBatchOutput(docs []Document, format string, frontmatter bool) error {
 				}
 			}
 		}
-		return printText(sb.String())
+		_, err := fmt.Fprint(w, sb.String())
+		return err
 	case "txtar":
 		var sb strings.Builder
 		for _, doc := range docs {
 			sb.WriteString(txtarEntry(doc.Name, doc.Content))
 		}
-		return printText(sb.String())
+		_, err := fmt.Fprint(w, sb.String())
+		return err
 	case "jsonl":
-		w, closer, err := outWriter()
-		if err != nil {
-			return err
-		}
-		defer closer()
 		enc := json.NewEncoder(w)
 		for _, doc := range docs {
 			if err := enc.Encode(doc); err != nil {
@@ -271,7 +269,7 @@ func printBatchOutput(docs []Document, format string, frontmatter bool) error {
 		}
 		return nil
 	default:
-		return printFormatted(resp)
+		return writeFormatted(w, format, resp)
 	}
 }
 
@@ -326,7 +324,12 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 	if outDir != "" {
 		outputErr = writeBatchOutdir(docs, outDir, outputFormat, batchFrontmatter)
 	} else {
-		outputErr = printBatchOutput(docs, outputFormat, batchFrontmatter)
+		w, closer, err := outWriter(outputFile)
+		if err != nil {
+			return err
+		}
+		defer closer()
+		outputErr = printBatchOutput(w, docs, outputFormat, batchFrontmatter)
 	}
 	if outputErr != nil {
 		return outputErr

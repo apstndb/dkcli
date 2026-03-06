@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -86,20 +87,29 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	w, closer, err := outWriter(outputFile)
+	if err != nil {
+		return err
+	}
+	defer closer()
+
 	if frontmatter {
 		s, err := formatDocWithFrontmatter(&doc)
 		if err != nil {
 			return err
 		}
-		return printText(s)
+		_, err = fmt.Fprint(w, s)
+		return err
 	}
 
 	switch outputFormat {
 	case "text":
-		return printText(formatDocText(&doc))
+		_, err := fmt.Fprint(w, formatDocText(&doc))
+		return err
 	case "txtar":
-		return printText(txtarEntry(doc.Name, doc.Content))
+		_, err := fmt.Fprint(w, txtarEntry(doc.Name, doc.Content))
+		return err
 	default:
-		return printFormatted(doc)
+		return writeFormatted(w, outputFormat, doc)
 	}
 }

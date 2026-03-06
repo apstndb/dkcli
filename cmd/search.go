@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -48,13 +49,7 @@ type searchResponse struct {
 
 // runSearchJSONL streams search results as JSONL, writing each chunk
 // immediately as pages are fetched rather than buffering all results.
-func runSearchJSONL(client *apiClient, query string) error {
-	w, closer, err := outWriter()
-	if err != nil {
-		return err
-	}
-	defer closer()
-
+func runSearchJSONL(w io.Writer, client *apiClient, query string) error {
 	enc := json.NewEncoder(w)
 	token := pageToken
 	pages := 0
@@ -134,8 +129,14 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	client := newAPIClient(apiKey)
 	query := strings.Join(args, " ")
 
+	w, closer, err := outWriter(outputFile)
+	if err != nil {
+		return err
+	}
+	defer closer()
+
 	if outputFormat == "jsonl" {
-		return runSearchJSONL(client, query)
+		return runSearchJSONL(w, client, query)
 	}
 
 	var allResults searchResponse
@@ -182,15 +183,17 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			sb.WriteString(chunk.Content)
 			sb.WriteByte('\n')
 		}
-		return printText(sb.String())
+		_, err := fmt.Fprint(w, sb.String())
+		return err
 	case "txtar":
 		var sb strings.Builder
 		for _, chunk := range allResults.Results {
 			name := fmt.Sprintf("%s#%s", chunk.Parent, chunk.ID)
 			sb.WriteString(txtarEntry(name, chunk.Content))
 		}
-		return printText(sb.String())
+		_, err := fmt.Fprint(w, sb.String())
+		return err
 	default:
-		return printFormatted(allResults)
+		return writeFormatted(w, outputFormat, allResults)
 	}
 }

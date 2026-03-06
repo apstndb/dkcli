@@ -210,27 +210,22 @@ func normalizeDocName(name string) string {
 }
 
 // outWriter returns the writer for command output.
-// If --output is set, it opens the file and returns it with a closer.
+// If file is non-empty, it opens the file and returns it with a closer.
 // Otherwise it returns stdout.
-func outWriter() (io.Writer, func(), error) {
-	if outputFile == "" {
+func outWriter(file string) (io.Writer, func(), error) {
+	if file == "" {
 		return os.Stdout, func() {}, nil
 	}
-	f, err := os.Create(outputFile)
+	f, err := os.Create(file)
 	if err != nil {
 		return nil, nil, err
 	}
 	return f, func() { f.Close() }, nil
 }
 
-func printFormatted(v any) error {
-	w, closer, err := outWriter()
-	if err != nil {
-		return err
-	}
-	defer closer()
-
-	switch outputFormat {
+// writeFormatted encodes v in the given format to w.
+func writeFormatted(w io.Writer, format string, v any) error {
+	switch format {
 	case "json":
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
@@ -240,18 +235,8 @@ func printFormatted(v any) error {
 	case "yaml":
 		return yaml.NewEncoder(w).Encode(v)
 	default:
-		return fmt.Errorf("unknown format: %s", outputFormat)
+		return fmt.Errorf("unknown format: %s", format)
 	}
-}
-
-func printText(s string) error {
-	w, closer, err := outWriter()
-	if err != nil {
-		return err
-	}
-	defer closer()
-	_, err = fmt.Fprint(w, s)
-	return err
 }
 
 // txtarEntry formats a single txtar file entry.

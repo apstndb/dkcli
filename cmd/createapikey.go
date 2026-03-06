@@ -182,13 +182,20 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		KeyString: ks.KeyString,
 	}
 
+	w, closer, err := outWriter(outputFile)
+	if err != nil {
+		return err
+	}
+	defer closer()
+
 	if outputFormat == "txtar" {
 		fmt.Fprintf(os.Stderr, "WARNING: format %q not supported for create-api-key, falling back to text\n", outputFormat)
 	}
 	if outputFormat == "text" || outputFormat == "txtar" {
-		return printText(fmt.Sprintf("Name:    %s\nAPI Key: %s\n", result.Name, result.KeyString))
+		_, err := fmt.Fprintf(w, "Name:    %s\nAPI Key: %s\n", result.Name, result.KeyString)
+		return err
 	}
-	return printFormatted(result)
+	return writeFormatted(w, outputFormat, result)
 }
 
 type quotaProjectTransport struct {
