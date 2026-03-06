@@ -71,10 +71,12 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	name := normalizeDocName(args[0])
-	url := baseURL + "/" + name
+	client := newAPIClient(apiKey)
 
-	body, err := doGet(url, apiKey)
+	name := normalizeDocName(args[0])
+	url := client.baseURL + "/" + name
+
+	body, err := client.doGet(url)
 	if err != nil {
 		return err
 	}

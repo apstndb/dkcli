@@ -38,15 +38,15 @@ type batchGetResponse struct {
 }
 
 // fetchBatchGet makes a single batchGet API call for the given document names.
-func fetchBatchGet(apiKey string, names []string) ([]Document, error) {
+func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
 	params := url.Values{}
 	for _, name := range names {
 		params.Add("names", name)
 	}
 
-	reqURL := baseURL + "/documents:batchGet?" + params.Encode()
+	reqURL := c.baseURL + "/documents:batchGet?" + params.Encode()
 
-	body, err := doGet(reqURL, apiKey)
+	body, err := c.doGet(reqURL)
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +72,8 @@ func isBisectable(err error) bool {
 //   - docs: successfully fetched documents
 //   - docErrs: per-document errors identified by bisection
 //   - fatal: non-bisectable error (network failure, 5xx, etc.)
-func fetchBatchBisect(apiKey string, names []string) ([]Document, []error, error) {
-	docs, err := fetchBatchGet(apiKey, names)
+func (c *apiClient) fetchBatchBisect(names []string) ([]Document, []error, error) {
+	docs, err := c.fetchBatchGet(names)
 	if err == nil {
 		return docs, nil, nil
 	}
@@ -87,17 +87,17 @@ func fetchBatchBisect(apiKey string, names []string) ([]Document, []error, error
 		return nil, []error{fmt.Errorf("%s: %w", names[0], err)}, nil
 	}
 
-	if verbose {
+	if c.verbose {
 		fmt.Fprintf(os.Stderr, "Batch failed (%d documents), bisecting to identify failures...\n", len(names))
 	}
 
 	// Split and retry each half.
 	mid := len(names) / 2
-	leftDocs, leftErrs, leftFatal := fetchBatchBisect(apiKey, names[:mid])
+	leftDocs, leftErrs, leftFatal := c.fetchBatchBisect(names[:mid])
 	if leftFatal != nil {
 		return nil, nil, leftFatal
 	}
-	rightDocs, rightErrs, rightFatal := fetchBatchBisect(apiKey, names[mid:])
+	rightDocs, rightErrs, rightFatal := c.fetchBatchBisect(names[mid:])
 	if rightFatal != nil {
 		return leftDocs, nil, rightFatal
 	}
@@ -161,21 +161,21 @@ func formatDocForFile(doc *Document, format string, frontmatter bool) ([]byte, e
 	}
 }
 
-// writeBatchOutdir writes each document as an individual file under outDir.
+// writeBatchOutdir writes each document as an individual file under dir.
 // Subdirectories are created as needed. Individual write failures are collected
 // and reported as a summary; processing continues on error.
-func writeBatchOutdir(docs []Document) error {
+func writeBatchOutdir(docs []Document, dir, format string, frontmatter bool) error {
 	var writeErrs []error
 	for i := range docs {
 		doc := &docs[i]
-		path := docFilePath(outDir, doc.Name, outputFormat)
+		path := docFilePath(dir, doc.Name, format)
 
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			writeErrs = append(writeErrs, fmt.Errorf("%s: %w", path, err))
 			continue
 		}
 
-		data, err := formatDocForFile(doc, outputFormat, batchFrontmatter)
+		data, err := formatDocForFile(doc, format, frontmatter)
 		if err != nil {
 			writeErrs = append(writeErrs, fmt.Errorf("%s: %w", path, err))
 			continue
@@ -200,15 +200,15 @@ func writeBatchOutdir(docs []Document) error {
 }
 
 // printBatchOutput writes the documents in the requested output format.
-func printBatchOutput(docs []Document) error {
+func printBatchOutput(docs []Document, format string, frontmatter bool) error {
 	resp := batchGetResponse{Documents: docs}
 
-	switch outputFormat {
+	switch format {
 	case "text":
 		var sb strings.Builder
 		for i := range docs {
 			doc := &docs[i]
-			if batchFrontmatter {
+			if frontmatter {
 				// Frontmatter blocks are self-delimiting; no separator needed.
 				s, err := formatDocWithFrontmatter(doc)
 				if err != nil {
@@ -269,6 +269,8 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		names[i] = normalizeDocName(arg)
 	}
 
+	client := newAPIClient(apiKey)
+
 	var docs []Document
 	var docErrs []error
 	for i := 0; i < len(names); i += batchGetMaxDocs {
@@ -279,7 +281,7 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "Fetching chunk %d-%d of %d documents...\n", i+1, end, len(names))
 		}
 
-		d, e, fatal := fetchBatchBisect(apiKey, chunk)
+		d, e, fatal := client.fetchBatchBisect(chunk)
 		if fatal != nil {
 			return fatal
 		}
@@ -298,9 +300,9 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 
 	var outputErr error
 	if outDir != "" {
-		outputErr = writeBatchOutdir(docs)
+		outputErr = writeBatchOutdir(docs, outDir, outputFormat, batchFrontmatter)
 	} else {
-		outputErr = printBatchOutput(docs)
+		outputErr = printBatchOutput(docs, outputFormat, batchFrontmatter)
 	}
 	if outputErr != nil {
 		return outputErr

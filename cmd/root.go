@@ -27,7 +27,7 @@ var (
 	verbose      bool
 )
 
-const baseURL = "https://developerknowledge.googleapis.com/v1alpha"
+var baseURL = "https://developerknowledge.googleapis.com/v1alpha"
 
 var rootCmd = &cobra.Command{
 	Use:   "dkcli",
@@ -45,6 +45,26 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "write output to file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "dump response headers to stderr")
 	rootCmd.SilenceUsage = true
+}
+
+// apiClient holds the configuration for making API requests.
+type apiClient struct {
+	baseURL string
+	apiKey  string
+	client  *http.Client
+	limiter *rate.Limiter
+	verbose bool
+}
+
+// newAPIClient creates an apiClient using the global defaults.
+func newAPIClient(apiKey string) *apiClient {
+	return &apiClient{
+		baseURL: baseURL,
+		apiKey:  apiKey,
+		client:  http.DefaultClient,
+		limiter: apiLimiter,
+		verbose: verbose,
+	}
 }
 
 // Document represents a Developer Knowledge API document.
@@ -135,12 +155,12 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 	return body, nil
 }
 
-func doGet(url, apiKey string) ([]byte, error) {
+func (c *apiClient) doGet(url string) ([]byte, error) {
 	const maxRetries = 3
 	backoff := 1 * time.Second
 
 	for attempt := range maxRetries {
-		if err := apiLimiter.Wait(context.Background()); err != nil {
+		if err := c.limiter.Wait(context.Background()); err != nil {
 			return nil, err
 		}
 
@@ -148,14 +168,14 @@ func doGet(url, apiKey string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("x-goog-api-key", apiKey)
+		req.Header.Set("x-goog-api-key", c.apiKey)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := c.client.Do(req)
 		if err != nil {
 			return nil, err
 		}
 
-		if verbose {
+		if c.verbose {
 			dump, _ := httputil.DumpResponse(resp, false)
 			fmt.Fprintf(os.Stderr, "%s", dump)
 		}
@@ -167,7 +187,7 @@ func doGet(url, apiKey string) ([]byte, error) {
 			if rlErr.RetryAfter > 0 {
 				wait = rlErr.RetryAfter
 			}
-			if verbose {
+			if c.verbose {
 				fmt.Fprintf(os.Stderr, "Rate limited, retrying after %v...\n", wait)
 			}
 			time.Sleep(wait)

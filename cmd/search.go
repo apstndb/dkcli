@@ -48,7 +48,7 @@ type searchResponse struct {
 
 // runSearchJSONL streams search results as JSONL, writing each chunk
 // immediately as pages are fetched rather than buffering all results.
-func runSearchJSONL(apiKey, query string) error {
+func runSearchJSONL(client *apiClient, query string) error {
 	w, closer, err := outWriter()
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func runSearchJSONL(apiKey, query string) error {
 	var lastNextPageToken string
 
 	for {
-		resp, err := fetchSearchPage(apiKey, query, token)
+		resp, err := client.fetchSearchPage(query, token)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func runSearchJSONL(apiKey, query string) error {
 	return nil
 }
 
-func fetchSearchPage(apiKey, query, token string) (*searchResponse, error) {
+func (c *apiClient) fetchSearchPage(query, token string) (*searchResponse, error) {
 	params := url.Values{}
 	params.Set("query", query)
 	if pageSize > 0 {
@@ -108,7 +108,7 @@ func fetchSearchPage(apiKey, query, token string) (*searchResponse, error) {
 		params.Set("pageToken", token)
 	}
 
-	body, err := doGet(baseURL+"/documents:searchDocumentChunks?"+params.Encode(), apiKey)
+	body, err := c.doGet(c.baseURL + "/documents:searchDocumentChunks?" + params.Encode())
 	if err != nil {
 		return nil, err
 	}
@@ -131,10 +131,11 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		pageSize = 20
 	}
 
+	client := newAPIClient(apiKey)
 	query := strings.Join(args, " ")
 
 	if outputFormat == "jsonl" {
-		return runSearchJSONL(apiKey, query)
+		return runSearchJSONL(client, query)
 	}
 
 	var allResults searchResponse
@@ -143,7 +144,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	start := time.Now()
 
 	for {
-		resp, err := fetchSearchPage(apiKey, query, token)
+		resp, err := client.fetchSearchPage(query, token)
 		if err != nil {
 			return err
 		}
