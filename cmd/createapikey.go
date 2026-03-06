@@ -27,7 +27,10 @@ var createAPIKeyCmd = &cobra.Command{
 
 The key is created under the specified Google Cloud project and scoped
 to developerknowledge.googleapis.com only. You need application default
-credentials (run 'gcloud auth application-default login' first).`,
+credentials (run 'gcloud auth application-default login' first).
+
+For advanced restrictions (IP allowlists, HTTP referrers, etc.), use
+'gcloud services api-keys create' instead.`,
 	Example: `  # Create an API key
   dkcli create-api-key --project my-project
 
