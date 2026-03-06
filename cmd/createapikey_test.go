@@ -34,6 +34,66 @@ func TestResolveProjectID(t *testing.T) {
 	}
 }
 
+func TestExtractAPITargets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		resp map[string]any
+		want []string
+	}{
+		{
+			name: "single_target",
+			resp: map[string]any{
+				"restrictions": map[string]any{
+					"apiTargets": []any{
+						map[string]any{"service": "developerknowledge.googleapis.com"},
+					},
+				},
+			},
+			want: []string{"developerknowledge.googleapis.com"},
+		},
+		{
+			name: "multiple_targets",
+			resp: map[string]any{
+				"restrictions": map[string]any{
+					"apiTargets": []any{
+						map[string]any{"service": "serviceA.googleapis.com"},
+						map[string]any{"service": "serviceB.googleapis.com"},
+					},
+				},
+			},
+			want: []string{"serviceA.googleapis.com", "serviceB.googleapis.com"},
+		},
+		{
+			name: "no_restrictions",
+			resp: map[string]any{},
+			want: nil,
+		},
+		{
+			name: "empty_targets",
+			resp: map[string]any{
+				"restrictions": map[string]any{},
+			},
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := extractAPITargets(tt.resp)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("got[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestQuotaProjectTransport(t *testing.T) {
 	t.Parallel()
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -59,10 +60,6 @@ type keyStringResult struct {
 	KeyString string `json:"keyString"`
 }
 
-type createAPIKeyResult struct {
-	Name      string `json:"name" yaml:"name"`
-	KeyString string `json:"keyString" yaml:"keyString"`
-}
 
 func resolveProjectID() string {
 	if projectID != "" {
@@ -152,7 +149,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("operation failed: %s", op.Error.Message)
 	}
 
-	// Extract key name from response
+	// Parse full key resource from LRO response.
 	var keyResp map[string]any
 	if err := json.Unmarshal(op.Response, &keyResp); err != nil {
 		return fmt.Errorf("parse response: %w", err)
@@ -162,7 +159,15 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: missing key name")
 	}
 
-	// Get key string
+	// Log restrictions so the user can verify the key is properly scoped.
+	if restrictions, ok := keyResp["restrictions"]; ok {
+		b, _ := json.MarshalIndent(restrictions, "", "  ")
+		fmt.Fprintf(os.Stderr, "Restrictions: %s\n", b)
+	} else {
+		fmt.Fprintln(os.Stderr, "WARNING: key has no restrictions")
+	}
+
+	// Get key string (separate endpoint; not included in create response).
 	ksResp, err := client.Get(fmt.Sprintf("https://apikeys.googleapis.com/v2/%s/keyString", keyName))
 	if err != nil {
 		return err
@@ -177,10 +182,8 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("parse key string: %w", err)
 	}
 
-	result := createAPIKeyResult{
-		Name:      keyName,
-		KeyString: ks.KeyString,
-	}
+	// Add keyString to the full key resource for structured output.
+	keyResp["keyString"] = ks.KeyString
 
 	w, closer, err := outWriter(outputFile)
 	if err != nil {
@@ -192,10 +195,39 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "WARNING: format %q not supported for create-api-key, falling back to text\n", outputFormat)
 	}
 	if outputFormat == "text" || outputFormat == "txtar" {
-		_, err := fmt.Fprintf(w, "Name:    %s\nAPI Key: %s\n", result.Name, result.KeyString)
-		return err
+		fmt.Fprintf(w, "Name:          %s\n", keyName)
+		if dn, ok := keyResp["displayName"].(string); ok && dn != "" {
+			fmt.Fprintf(w, "Display Name:  %s\n", dn)
+		}
+		fmt.Fprintf(w, "API Key:       %s\n", ks.KeyString)
+		if targets := extractAPITargets(keyResp); len(targets) > 0 {
+			fmt.Fprintf(w, "Restricted to: %s\n", strings.Join(targets, ", "))
+		}
+		return nil
 	}
-	return writeFormatted(w, outputFormat, result)
+	return writeFormatted(w, outputFormat, keyResp)
+}
+
+// extractAPITargets returns the service names from the restrictions.apiTargets
+// field of a Key resource parsed as map[string]any.
+func extractAPITargets(keyResp map[string]any) []string {
+	restrictions, ok := keyResp["restrictions"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	targets, ok := restrictions["apiTargets"].([]any)
+	if !ok {
+		return nil
+	}
+	var services []string
+	for _, t := range targets {
+		if tm, ok := t.(map[string]any); ok {
+			if svc, ok := tm["service"].(string); ok {
+				services = append(services, svc)
+			}
+		}
+	}
+	return services
 }
 
 type quotaProjectTransport struct {
