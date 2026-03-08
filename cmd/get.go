@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -86,6 +87,9 @@ func runGet(cmd *cobra.Command, args []string) error {
 	if err := json.Unmarshal(body, &doc); err != nil {
 		return err
 	}
+
+	fmt.Fprintf(os.Stderr, "%s (%d bytes, %d lines)\n",
+		doc.Name, len(doc.Content), strings.Count(doc.Content, "\n"))
 
 	w, closer, err := outWriter(outputFile)
 	if err != nil {
