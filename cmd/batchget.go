@@ -31,6 +31,7 @@ var batchGetCmd = &cobra.Command{
 func init() {
 	batchGetCmd.Flags().StringVar(&outDir, "outdir", "", "write each document to a separate file under this directory")
 	batchGetCmd.Flags().BoolVar(&batchFrontmatter, "frontmatter", false, "prepend YAML frontmatter to content (text format only)")
+	batchGetCmd.Flags().BoolVar(&sizeOnly, "size-only", false, "print document sizes only, suppress content (API calls still occur)")
 	rootCmd.AddCommand(batchGetCmd)
 }
 
@@ -320,8 +321,14 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("all %d documents failed", len(docErrs))
 	}
 
+	if sizeOnly {
+		printDocsSummary(docs)
+	}
+
 	var outputErr error
-	if outDir != "" {
+	if sizeOnly {
+		// Content output suppressed.
+	} else if outDir != "" {
 		outputErr = writeBatchOutdir(docs, outDir, outputFormat, batchFrontmatter)
 	} else {
 		w, closer, err := outWriter(outputFile)

@@ -3,14 +3,16 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
-var frontmatter bool
+var (
+	frontmatter bool
+	sizeOnly bool
+)
 
 var getCmd = &cobra.Command{
 	Use:   "get <document-name>",
@@ -27,6 +29,7 @@ The document name can be specified as:
 
 func init() {
 	getCmd.Flags().BoolVar(&frontmatter, "frontmatter", false, "prepend YAML frontmatter to content")
+	getCmd.Flags().BoolVar(&sizeOnly, "size-only", false, "print document size only, suppress content (API calls still occur)")
 	rootCmd.AddCommand(getCmd)
 }
 
@@ -88,8 +91,11 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "%s (%d bytes, %d lines)\n",
-		doc.Name, len(doc.Content), strings.Count(doc.Content, "\n"))
+	printDocSummary(&doc)
+
+	if sizeOnly {
+		return nil
+	}
 
 	w, closer, err := outWriter(outputFile)
 	if err != nil {
