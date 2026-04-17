@@ -40,6 +40,7 @@ dkcli can search and retrieve documents from the following domains only.
 
 | Domain | Description |
 |--------|-------------|
+| adk.dev | Agent Development Kit |
 | ai.google.dev | Google AI (Gemini API, etc.) |
 | developer.android.com | Android |
 | developer.chrome.com | Chrome |
@@ -49,8 +50,11 @@ dkcli can search and retrieve documents from the following domains only.
 | docs.apigee.com | Apigee |
 | firebase.google.com | Firebase |
 | fuchsia.dev | Fuchsia OS |
+| go.dev | Go |
 | web.dev | Web development best practices |
 | www.tensorflow.org | TensorFlow |
+
+The corpus excludes language reference pages under `docs.cloud.google.com/*/docs/reference` for C++, .NET, Go, Java, Node.js, PHP, Python, Ruby, and Rust.
 
 If the user asks about documentation outside these domains, dkcli won't help — fall back to other methods.
 
@@ -70,6 +74,12 @@ Use auto-paging (`-a`) when you need broader coverage:
 
 ```bash
 dkcli search -a "BigQuery partitioned tables"
+```
+
+Use `--filter` when you need to stay within a specific data source or time range:
+
+```bash
+dkcli search --filter 'dataSource = "docs.cloud.google.com"' "BigQuery"
 ```
 
 ### Step 2: Get the full document
@@ -114,6 +124,20 @@ For quick inline use without file output:
 dkcli batch-get docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2
 ```
 
+### Metadata-only retrieval
+
+Search results now also include embedded document metadata under `results[].document` in structured output.
+
+### Grounded answers
+
+For a quick generated answer instead of raw document content, use:
+
+```bash
+dkcli answer-query "How do I create a Cloud Storage bucket?"
+```
+
+This command calls the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC if a quota project is available.
+
 ## Combining with shell tools
 
 dkcli's structured output formats make it easy to extract exactly what you need:
@@ -148,10 +172,17 @@ dkcli batch-get -f txtar docs.cloud.google.com/doc1 docs.cloud.google.com/doc2  
 
 ## Error handling
 
-If dkcli fails with an API key error (`set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY`), suggest:
+Document commands prefer `DEVELOPERKNOWLEDGE_API_KEY` or `GOOGLE_API_KEY` when either is set. If neither is set, dkcli falls back to ADC.
+
+When using local ADC, the Developer Knowledge API also requires a quota project. dkcli resolves that from `GOOGLE_CLOUD_QUOTA_PROJECT` or `quota_project_id` in the ADC file. The standard way to set that up is `gcloud auth application-default set-quota-project <project-id>`.
+
+If dkcli fails because neither an API key nor ADC is available, suggest:
 
 ```bash
-# Create a key and set it in the current shell (requires gcloud auth application-default login)
+# Option 1: use ADC
+gcloud auth application-default login
+
+# Option 2: create a key and set it in the current shell (requires ADC once)
 export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p <gcp-project-id> --key-only)
 
 # To persist, append to shell profile
@@ -163,6 +194,8 @@ If the user already has a key, they just need to set the environment variable:
 export DEVELOPERKNOWLEDGE_API_KEY=<key>
 ```
 
+Note: `get` and `batch-get` currently stay on `v1alpha` as a workaround because the live `v1` methods have been returning `INTERNAL` in direct testing, even though the GA docs and proto exist.
+
 ## Command reference
 
 | Command | Purpose |
@@ -171,6 +204,7 @@ export DEVELOPERKNOWLEDGE_API_KEY=<key>
 | `dkcli search -a <query>` | Search with auto-paging |
 | `dkcli get <doc-name>` | Get a full document |
 | `dkcli batch-get <names>...` | Get multiple documents |
+| `dkcli answer-query <query>` | Generate a grounded answer |
 | `dkcli create-api-key --project <id>` | Create a Developer Knowledge API key |
 
 | Useful flags | |
@@ -179,6 +213,7 @@ export DEVELOPERKNOWLEDGE_API_KEY=<key>
 | `-o <file>` | Write to file |
 | `--page-size N` | Results per page for search (max 20) |
 | `--max-pages N` | Max pages with `-a` (default 5) |
+| `--filter <expr>` | Filter search results by document metadata |
 | `--outdir <dir>` | Write each doc to separate files (batch-get) |
 | `--frontmatter` | Prepend YAML frontmatter to text output (get, batch-get) |
 | `--key-only` | Print only the API key string (create-api-key) |

@@ -53,8 +53,8 @@ func init() {
 }
 
 type createKeyRequest struct {
-	DisplayName  string            `json:"displayName"`
-	Restrictions keyRestrictions   `json:"restrictions"`
+	DisplayName  string          `json:"displayName"`
+	Restrictions keyRestrictions `json:"restrictions"`
 }
 
 type keyRestrictions struct {
@@ -80,7 +80,6 @@ type lroError struct {
 type keyStringResult struct {
 	KeyString string `json:"keyString"`
 }
-
 
 func resolveProjectID() string {
 	if projectID != "" {

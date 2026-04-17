@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/time/rate"
@@ -19,7 +20,7 @@ func newTestClient(t *testing.T, handler http.Handler) *apiClient {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	return &apiClient{
-		baseURL: srv.URL + "/v1alpha",
+		baseURL: srv.URL + "/v1",
 		apiKey:  "test-key",
 		client:  srv.Client(),
 		limiter: rate.NewLimiter(rate.Inf, 0),
@@ -157,6 +158,7 @@ func TestFetchBatchGet(t *testing.T) {
 		resp := batchGetResponse{Documents: docs}
 		json.NewEncoder(w).Encode(resp)
 	}))
+	client.baseURL = strings.TrimSuffix(client.baseURL, "/v1") + "/v1alpha"
 
 	got, err := client.fetchBatchGet([]string{"documents/example.com/a", "documents/example.com/b"})
 	if err != nil {
@@ -187,6 +189,7 @@ func TestFetchBatchGet_APIError(t *testing.T) {
 			},
 		})
 	}))
+	client.baseURL = strings.TrimSuffix(client.baseURL, "/v1") + "/v1alpha"
 
 	_, err := client.fetchBatchGet([]string{"bad-name"})
 	if err == nil {
@@ -227,6 +230,7 @@ func TestFetchBatchBisect(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(batchGetResponse{Documents: docs})
 	}))
+	client.baseURL = strings.TrimSuffix(client.baseURL, "/v1") + "/v1alpha"
 
 	docs, docErrs, fatal := client.fetchBatchBisect([]string{
 		"documents/a", "documents/bad", "documents/b",
@@ -251,6 +255,7 @@ func TestFetchBatchBisect_NonBisectable(t *testing.T) {
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}))
+	client.baseURL = strings.TrimSuffix(client.baseURL, "/v1") + "/v1alpha"
 
 	docs, docErrs, fatal := client.fetchBatchBisect([]string{"documents/a"})
 	if fatal == nil {

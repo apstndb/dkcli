@@ -12,14 +12,14 @@ func TestFetchSearchPage(t *testing.T) {
 
 	want := &searchResponse{
 		Results: []DocumentChunk{
-			{Parent: "documents/example.com/page", ID: "c1", Content: "content A"},
+			{Parent: "documents/example.com/page", ID: "c1", Content: "content A", Document: &Document{Title: "Page A", DataSource: "docs.cloud.google.com"}},
 			{Parent: "documents/example.com/other", ID: "c2", Content: "content B"},
 		},
 		NextPageToken: "next-token",
 	}
 
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1alpha/documents:searchDocumentChunks" {
+		if r.URL.Path != "/v1/documents:searchDocumentChunks" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -32,7 +32,7 @@ func TestFetchSearchPage(t *testing.T) {
 		json.NewEncoder(w).Encode(want)
 	}))
 
-	got, err := client.fetchSearchPage("test query", 0, "")
+	got, err := client.fetchSearchPage("test query", 0, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +44,9 @@ func TestFetchSearchPage(t *testing.T) {
 	}
 	if got.NextPageToken != "next-token" {
 		t.Errorf("nextPageToken = %q, want %q", got.NextPageToken, "next-token")
+	}
+	if got.Results[0].Document == nil || got.Results[0].Document.Title != "Page A" {
+		t.Fatalf("expected embedded document metadata, got %+v", got.Results[0].Document)
 	}
 }
 
@@ -57,7 +60,7 @@ func TestFetchSearchPage_WithPageToken(t *testing.T) {
 		json.NewEncoder(w).Encode(&searchResponse{})
 	}))
 
-	_, err := client.fetchSearchPage("test", 0, "abc123")
+	_, err := client.fetchSearchPage("test", 0, "abc123", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +76,23 @@ func TestFetchSearchPage_WithPageSize(t *testing.T) {
 		json.NewEncoder(w).Encode(&searchResponse{})
 	}))
 
-	_, err := client.fetchSearchPage("test", 10, "")
+	_, err := client.fetchSearchPage("test", 10, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFetchSearchPage_WithFilter(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("filter"); got != `dataSource="docs.cloud.google.com"` {
+			t.Errorf("filter = %q, want %q", got, `dataSource="docs.cloud.google.com"`)
+		}
+		json.NewEncoder(w).Encode(&searchResponse{})
+	}))
+
+	_, err := client.fetchSearchPage("test", 0, "", `dataSource="docs.cloud.google.com"`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +113,7 @@ func TestFetchSearchPage_APIError(t *testing.T) {
 		})
 	}))
 
-	_, err := client.fetchSearchPage("", 0, "")
+	_, err := client.fetchSearchPage("", 0, "", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

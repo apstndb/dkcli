@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,11 +10,14 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"golang.org/x/time/rate"
 	"gopkg.in/yaml.v3"
 )
@@ -27,7 +31,35 @@ var (
 	verbose      bool
 )
 
-var baseURL = "https://developerknowledge.googleapis.com/v1alpha"
+var (
+	searchBaseURL = "https://developerknowledge.googleapis.com/v1"
+	// Workaround: the live v1 get/batchGet methods currently return INTERNAL,
+	// so content retrieval stays on v1alpha until the backend catches up.
+	contentBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
+	// Workaround: answerQuery is still documented and served on v1alpha.
+	answerQueryURL = "https://developerknowledge.googleapis.com/v1alpha:answerQuery"
+)
+
+const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
+
+type authMode int
+
+const authPreferAPIKey authMode = iota
+
+var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+	return google.DefaultTokenSource(ctx, scopes...)
+}
+
+var adcCredentialsPath = func() string {
+	if path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); path != "" {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "dkcli",
@@ -56,33 +88,64 @@ type apiClient struct {
 	verbose bool
 }
 
+func apiKeyFromEnv() string {
+	if key := os.Getenv("DEVELOPERKNOWLEDGE_API_KEY"); key != "" {
+		return key
+	}
+	if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
+		return key
+	}
+	return ""
+}
+
 // newAPIClient creates an apiClient using the global defaults.
-func newAPIClient(apiKey string) *apiClient {
-	return &apiClient{
-		baseURL: baseURL,
-		apiKey:  apiKey,
+func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
+	client := &apiClient{
+		baseURL: searchBaseURL,
 		client:  http.DefaultClient,
 		limiter: apiLimiter,
 		verbose: verbose,
 	}
+
+	if mode == authPreferAPIKey {
+		if apiKey := apiKeyFromEnv(); apiKey != "" {
+			client.apiKey = apiKey
+			return client, nil
+		}
+	}
+
+	tokenSource, err := defaultTokenSource(ctx, cloudPlatformScope)
+	if err != nil {
+		if mode == authPreferAPIKey {
+			return nil, fmt.Errorf("set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY, or configure ADC with 'gcloud auth application-default login': %w", err)
+		}
+		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
+	}
+
+	client.client = oauth2.NewClient(ctx, tokenSource)
+	if quotaProject := resolveQuotaProjectID(); quotaProject != "" {
+		baseTransport := client.client.Transport
+		if baseTransport == nil {
+			baseTransport = http.DefaultTransport
+		}
+		client.client.Transport = &quotaProjectTransport{
+			Base:    baseTransport,
+			Project: quotaProject,
+		}
+	}
+	return client, nil
 }
 
 // Document represents a Developer Knowledge API document.
 type Document struct {
 	Name        string `json:"name" yaml:"name"`
 	URI         string `json:"uri" yaml:"uri"`
-	Content     string `json:"content" yaml:"content"`
-	Description string `json:"description" yaml:"description"`
-}
-
-func getAPIKey() (string, error) {
-	if key := os.Getenv("DEVELOPERKNOWLEDGE_API_KEY"); key != "" {
-		return key, nil
-	}
-	if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
-		return key, nil
-	}
-	return "", fmt.Errorf("set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY")
+	Content     string `json:"content,omitempty" yaml:"content,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	DataSource  string `json:"dataSource,omitempty" yaml:"dataSource,omitempty"`
+	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
+	UpdateTime  string `json:"updateTime,omitempty" yaml:"updateTime,omitempty"`
+	View        string `json:"view,omitempty" yaml:"view,omitempty"`
 }
 
 // apiError represents a non-OK HTTP response from the API.
@@ -155,7 +218,7 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 	return body, nil
 }
 
-func (c *apiClient) doGet(url string) ([]byte, error) {
+func (c *apiClient) doRequest(method, url string, body []byte, contentType string) ([]byte, error) {
 	const maxRetries = 3
 	backoff := 1 * time.Second
 
@@ -164,11 +227,20 @@ func (c *apiClient) doGet(url string) ([]byte, error) {
 			return nil, err
 		}
 
-		req, err := http.NewRequest(http.MethodGet, url, nil)
+		var requestBody io.Reader
+		if body != nil {
+			requestBody = bytes.NewReader(body)
+		}
+		req, err := http.NewRequest(method, url, requestBody)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("x-goog-api-key", c.apiKey)
+		if c.apiKey != "" {
+			req.Header.Set("x-goog-api-key", c.apiKey)
+		}
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
 
 		resp, err := c.client.Do(req)
 		if err != nil {
@@ -200,6 +272,14 @@ func (c *apiClient) doGet(url string) ([]byte, error) {
 	return nil, fmt.Errorf("exceeded max retries")
 }
 
+func (c *apiClient) doGet(url string) ([]byte, error) {
+	return c.doRequest(http.MethodGet, url, nil, "")
+}
+
+func (c *apiClient) doJSONPost(url string, body []byte) ([]byte, error) {
+	return c.doRequest(http.MethodPost, url, body, "application/json")
+}
+
 func normalizeDocName(name string) string {
 	name = strings.TrimPrefix(name, "https://")
 	name = strings.TrimPrefix(name, "http://")
@@ -207,6 +287,28 @@ func normalizeDocName(name string) string {
 		name = "documents/" + name
 	}
 	return name
+}
+
+func resolveQuotaProjectID() string {
+	if p := os.Getenv("GOOGLE_CLOUD_QUOTA_PROJECT"); p != "" {
+		return p
+	}
+
+	path := adcCredentialsPath()
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var cfg struct {
+		QuotaProjectID string `json:"quota_project_id"`
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return ""
+	}
+	return cfg.QuotaProjectID
 }
 
 // outWriter returns the writer for command output.

@@ -282,17 +282,16 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--frontmatter can only be used with text format")
 	}
 
-	apiKey, err := getAPIKey()
-	if err != nil {
-		return err
-	}
-
 	names := make([]string, len(args))
 	for i, arg := range args {
 		names[i] = normalizeDocName(arg)
 	}
 
-	client := newAPIClient(apiKey)
+	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
+	if err != nil {
+		return err
+	}
+	client.baseURL = contentBaseURL
 
 	var docs []Document
 	var docErrs []error

@@ -59,7 +59,11 @@ func TestFormatDocWithFrontmatter(t *testing.T) {
 		doc := &Document{
 			Name:        "documents/example.com/page",
 			URI:         "https://example.com/page",
+			Title:       "Example Page",
 			Description: "A test page",
+			DataSource:  "example.com",
+			UpdateTime:  "2026-04-17T00:00:00Z",
+			View:        "DOCUMENT_VIEW_CONTENT",
 			Content:     "Hello world",
 		}
 		got, err := formatDocWithFrontmatter(doc)
@@ -74,6 +78,12 @@ func TestFormatDocWithFrontmatter(t *testing.T) {
 		}
 		if !strings.Contains(got, "uri: https://example.com/page") {
 			t.Error("expected uri in frontmatter")
+		}
+		if !strings.Contains(got, "title: Example Page") {
+			t.Error("expected title in frontmatter")
+		}
+		if !strings.Contains(got, "data_source: example.com") {
+			t.Error("expected data source in frontmatter")
 		}
 		if !strings.HasSuffix(got, "Hello world\n") {
 			t.Errorf("expected content at end, got suffix %q", got[len(got)-20:])
@@ -118,6 +128,7 @@ func TestFetchGet(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(doc)
 	}))
+	client.baseURL = strings.TrimSuffix(client.baseURL, "/v1") + "/v1alpha"
 
 	url := client.baseURL + "/documents/example.com/page"
 	body, err := client.doGet(url)
