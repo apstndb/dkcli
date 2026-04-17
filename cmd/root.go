@@ -229,12 +229,12 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 	return body, nil
 }
 
-func (c *apiClient) doRequest(method, url string, body []byte, contentType string) ([]byte, error) {
+func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType string) ([]byte, error) {
 	const maxRetries = 3
 	backoff := 1 * time.Second
 	ctx := c.requestContext()
 
-	for attempt := range maxRetries {
+	for attempt := 0; attempt < maxRetries; attempt++ {
 		if err := c.limiter.Wait(ctx); err != nil {
 			return nil, err
 		}
@@ -305,11 +305,11 @@ func sleepContext(ctx context.Context, wait time.Duration) error {
 }
 
 func (c *apiClient) doGet(url string) ([]byte, error) {
-	return c.doRequest(http.MethodGet, url, nil, "")
+	return c.doAPIRequest(http.MethodGet, url, nil, "")
 }
 
 func (c *apiClient) doJSONPost(url string, body []byte) ([]byte, error) {
-	return c.doRequest(http.MethodPost, url, body, "application/json")
+	return c.doAPIRequest(http.MethodPost, url, body, "application/json")
 }
 
 func normalizeDocName(name string) string {
