@@ -3,15 +3,25 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/time/rate"
 )
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestNewAPIClient_PrefersAPIKey(t *testing.T) {
 	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "api-key")
@@ -154,5 +164,100 @@ func TestNewAPIClient_FailsFastWithoutQuotaProjectForUserADC(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "set-quota-project") {
 		t.Fatalf("error = %q, want quota project guidance", err)
+	}
+}
+
+func TestAPIClient_DoRequestHonorsCanceledContextWhileWaiting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	called := false
+	client := &apiClient{
+		client: &http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				called = true
+				return nil, nil
+			}),
+		},
+		ctx:     ctx,
+		limiter: rate.NewLimiter(rate.Every(time.Hour), 1),
+	}
+	client.limiter.Allow()
+
+	_, err := client.doGet("https://example.com")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if called {
+		t.Fatal("request should not be attempted after context cancellation")
+	}
+}
+
+func TestAPIClient_DoRequestUsesRequestContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	client := &apiClient{
+		client: &http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				<-req.Context().Done()
+				return nil, req.Context().Err()
+			}),
+		},
+		ctx:     ctx,
+		limiter: rate.NewLimiter(rate.Inf, 1),
+	}
+
+	go func() {
+		_, err := client.doGet("https://example.com")
+		done <- err
+	}()
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want context.Canceled", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("request did not observe context cancellation")
+	}
+}
+
+func TestAPIClient_DoRequestCancelsRetryBackoff(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	attempts := 0
+	client := &apiClient{
+		client: &http.Client{
+			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				attempts++
+				cancel()
+				return &http.Response{
+					StatusCode: http.StatusTooManyRequests,
+					Header:     http.Header{"Retry-After": []string{"60"}},
+					Body:       io.NopCloser(strings.NewReader("")),
+				}, nil
+			}),
+		},
+		ctx:     ctx,
+		limiter: rate.NewLimiter(rate.Inf, 1),
+	}
+
+	_, err := client.doGet("https://example.com")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
 	}
 }

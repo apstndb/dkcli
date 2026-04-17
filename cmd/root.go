@@ -89,6 +89,7 @@ type apiClient struct {
 	baseURL string
 	apiKey  string
 	client  *http.Client
+	ctx     context.Context
 	limiter *rate.Limiter
 	verbose bool
 }
@@ -108,6 +109,7 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	client := &apiClient{
 		baseURL: searchBaseURL,
 		client:  http.DefaultClient,
+		ctx:     ctx,
 		limiter: apiLimiter,
 		verbose: verbose,
 	}
@@ -230,9 +232,10 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 func (c *apiClient) doRequest(method, url string, body []byte, contentType string) ([]byte, error) {
 	const maxRetries = 3
 	backoff := 1 * time.Second
+	ctx := c.requestContext()
 
 	for attempt := range maxRetries {
-		if err := c.limiter.Wait(context.Background()); err != nil {
+		if err := c.limiter.Wait(ctx); err != nil {
 			return nil, err
 		}
 
@@ -240,7 +243,7 @@ func (c *apiClient) doRequest(method, url string, body []byte, contentType strin
 		if body != nil {
 			requestBody = bytes.NewReader(body)
 		}
-		req, err := http.NewRequest(method, url, requestBody)
+		req, err := http.NewRequestWithContext(ctx, method, url, requestBody)
 		if err != nil {
 			return nil, err
 		}
@@ -271,7 +274,9 @@ func (c *apiClient) doRequest(method, url string, body []byte, contentType strin
 			if c.verbose {
 				fmt.Fprintf(os.Stderr, "Rate limited, retrying after %v...\n", wait)
 			}
-			time.Sleep(wait)
+			if err := sleepContext(ctx, wait); err != nil {
+				return nil, err
+			}
 			backoff *= 2
 			continue
 		}
@@ -279,6 +284,24 @@ func (c *apiClient) doRequest(method, url string, body []byte, contentType strin
 	}
 	// unreachable
 	return nil, fmt.Errorf("exceeded max retries")
+}
+
+func (c *apiClient) requestContext() context.Context {
+	if c.ctx != nil {
+		return c.ctx
+	}
+	return context.Background()
+}
+
+func sleepContext(ctx context.Context, wait time.Duration) error {
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (c *apiClient) doGet(url string) ([]byte, error) {
