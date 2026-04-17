@@ -59,11 +59,11 @@ var adcCredentialsPath = func() string {
 	if path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); path != "" {
 		return path
 	}
-	home, err := os.UserHomeDir()
+	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
+	return filepath.Join(configDir, "gcloud", "application_default_credentials.json")
 }
 
 var rootCmd = &cobra.Command{
