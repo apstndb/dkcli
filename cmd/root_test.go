@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/oauth2"
@@ -93,7 +94,8 @@ func TestNewAPIClient_SetsQuotaProjectHeader(t *testing.T) {
 
 func TestResolveQuotaProjectID(t *testing.T) {
 	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-project")
-	if got := resolveQuotaProjectID(); got != "quota-project" {
+	got, _ := resolveQuotaProjectID()
+	if got != "quota-project" {
 		t.Fatalf("got %q, want %q", got, "quota-project")
 	}
 }
@@ -115,7 +117,42 @@ func TestResolveQuotaProjectIDFromADCFile(t *testing.T) {
 	adcCredentialsPath = func() string { return path }
 	t.Cleanup(func() { adcCredentialsPath = orig })
 
-	if got := resolveQuotaProjectID(); got != "from-file" {
+	got, _ := resolveQuotaProjectID()
+	if got != "from-file" {
 		t.Fatalf("got %q, want %q", got, "from-file")
+	}
+}
+
+func TestNewAPIClient_FailsFastWithoutQuotaProjectForUserADC(t *testing.T) {
+	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "")
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "adc.json")
+	data, err := json.Marshal(map[string]string{"type": "authorized_user"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := adcCredentialsPath
+	adcCredentialsPath = func() string { return path }
+	t.Cleanup(func() { adcCredentialsPath = origPath })
+
+	origTokenSource := defaultTokenSource
+	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
+	}
+	t.Cleanup(func() { defaultTokenSource = origTokenSource })
+
+	_, err = newAPIClient(context.Background(), authPreferAPIKey)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "set-quota-project") {
+		t.Fatalf("error = %q, want quota project guidance", err)
 	}
 }

@@ -172,7 +172,7 @@ dkcli batch-get -f txtar docs.cloud.google.com/doc1 docs.cloud.google.com/doc2  
 
 ## Error handling
 
-Document commands prefer `DEVELOPERKNOWLEDGE_API_KEY` or `GOOGLE_API_KEY` when either is set. If neither is set, dkcli falls back to ADC.
+Developer Knowledge API commands prefer `DEVELOPERKNOWLEDGE_API_KEY` or `GOOGLE_API_KEY` when either is set, except `create-api-key`. If neither is set, dkcli falls back to ADC.
 
 When using local ADC, the Developer Knowledge API also requires a quota project. dkcli resolves that from `GOOGLE_CLOUD_QUOTA_PROJECT` or `quota_project_id` in the ADC file. The standard way to set that up is `gcloud auth application-default set-quota-project <project-id>`.
 

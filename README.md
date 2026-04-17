@@ -10,7 +10,7 @@ go install github.com/apstndb/dkcli@latest
 
 ## Authentication
 
-Document retrieval commands prefer an API key when one is configured:
+Developer Knowledge API commands prefer an API key when one is configured, except `create-api-key`:
 
 ```
 export DEVELOPERKNOWLEDGE_API_KEY=<your-key>

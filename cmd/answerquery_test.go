@@ -10,8 +10,6 @@ import (
 )
 
 func TestAnswerQuery(t *testing.T) {
-	t.Parallel()
-
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1alpha:answerQuery" {
 			http.Error(w, "not found", http.StatusNotFound)

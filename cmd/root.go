@@ -50,6 +50,11 @@ var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.Tok
 	return google.DefaultTokenSource(ctx, scopes...)
 }
 
+type adcCredentialsMetadata struct {
+	Type           string `json:"type"`
+	QuotaProjectID string `json:"quota_project_id"`
+}
+
 var adcCredentialsPath = func() string {
 	if path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); path != "" {
 		return path
@@ -123,7 +128,11 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	}
 
 	client.client = oauth2.NewClient(ctx, tokenSource)
-	if quotaProject := resolveQuotaProjectID(); quotaProject != "" {
+	quotaProject, metadata := resolveQuotaProjectID()
+	if quotaProject == "" && metadata.Type == "authorized_user" {
+		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
+	}
+	if quotaProject != "" {
 		baseTransport := client.client.Transport
 		if baseTransport == nil {
 			baseTransport = http.DefaultTransport
@@ -289,26 +298,40 @@ func normalizeDocName(name string) string {
 	return name
 }
 
-func resolveQuotaProjectID() string {
-	if p := os.Getenv("GOOGLE_CLOUD_QUOTA_PROJECT"); p != "" {
-		return p
-	}
-
+func loadADCCredentialsMetadata() adcCredentialsMetadata {
 	path := adcCredentialsPath()
 	if path == "" {
-		return ""
+		return adcCredentialsMetadata{}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		return adcCredentialsMetadata{}
 	}
-	var cfg struct {
-		QuotaProjectID string `json:"quota_project_id"`
-	}
+	var cfg adcCredentialsMetadata
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return ""
+		return adcCredentialsMetadata{}
 	}
-	return cfg.QuotaProjectID
+	return cfg
+}
+
+func resolveQuotaProjectID() (string, adcCredentialsMetadata) {
+	if p := os.Getenv("GOOGLE_CLOUD_QUOTA_PROJECT"); p != "" {
+		return p, adcCredentialsMetadata{}
+	}
+
+	cfg := loadADCCredentialsMetadata()
+	return cfg.QuotaProjectID, cfg
+}
+
+type quotaProjectTransport struct {
+	Base    http.RoundTripper
+	Project string
+}
+
+func (t *quotaProjectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("x-goog-user-project", t.Project)
+	return t.Base.RoundTrip(req)
 }
 
 // outWriter returns the writer for command output.
