@@ -108,7 +108,7 @@ func apiKeyFromEnv() string {
 func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	client := &apiClient{
 		baseURL: searchBaseURL,
-		client:  http.DefaultClient,
+		client:  &http.Client{},
 		ctx:     ctx,
 		limiter: apiLimiter,
 		verbose: verbose,
@@ -153,9 +153,9 @@ type Document struct {
 	URI         string `json:"uri" yaml:"uri"`
 	Content     string `json:"content,omitempty" yaml:"content,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
-	DataSource  string `json:"dataSource,omitempty" yaml:"dataSource,omitempty"`
+	DataSource  string `json:"dataSource,omitempty" yaml:"data_source,omitempty"`
 	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
-	UpdateTime  string `json:"updateTime,omitempty" yaml:"updateTime,omitempty"`
+	UpdateTime  string `json:"updateTime,omitempty" yaml:"update_time,omitempty"`
 	View        string `json:"view,omitempty" yaml:"view,omitempty"`
 }
 

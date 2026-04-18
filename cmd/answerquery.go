@@ -29,7 +29,7 @@ type answerQueryRequest struct {
 }
 
 type Answer struct {
-	AnswerText string `json:"answerText" yaml:"answerText"`
+	AnswerText string `json:"answerText" yaml:"answer_text"`
 }
 
 type answerQueryResponse struct {

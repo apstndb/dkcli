@@ -47,7 +47,7 @@ type DocumentChunk struct {
 
 type searchResponse struct {
 	Results       []DocumentChunk `json:"results" yaml:"results"`
-	NextPageToken string          `json:"nextPageToken,omitempty" yaml:"nextPageToken,omitempty"`
+	NextPageToken string          `json:"nextPageToken,omitempty" yaml:"next_page_token,omitempty"`
 }
 
 // runSearchJSONL streams search results as JSONL, writing each chunk

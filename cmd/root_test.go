@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/oauth2"
 	"golang.org/x/time/rate"
+	"gopkg.in/yaml.v3"
 )
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
@@ -40,8 +41,11 @@ func TestNewAPIClient_PrefersAPIKey(t *testing.T) {
 	if client.apiKey != "api-key" {
 		t.Fatalf("apiKey = %q, want %q", client.apiKey, "api-key")
 	}
-	if client.client != http.DefaultClient {
-		t.Fatal("expected default HTTP client when using API key auth")
+	if client.client == nil {
+		t.Fatal("expected HTTP client when using API key auth")
+	}
+	if client.client == http.DefaultClient {
+		t.Fatal("expected a dedicated HTTP client when using API key auth")
 	}
 }
 
@@ -259,5 +263,35 @@ func TestAPIClient_DoRequestCancelsRetryBackoff(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestYAMLTagsUseSnakeCase(t *testing.T) {
+	got, err := yaml.Marshal(map[string]any{
+		"document": Document{
+			DataSource: "example.com",
+			UpdateTime: "2026-04-18T00:00:00Z",
+		},
+		"search": searchResponse{
+			NextPageToken: "next-token",
+		},
+		"answer": answerQueryResponse{
+			Answer: Answer{AnswerText: "grounded"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text := string(got)
+	for _, want := range []string{"data_source:", "update_time:", "next_page_token:", "answer_text:"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("yaml output %q does not contain %q", text, want)
+		}
+	}
+	for _, unwanted := range []string{"dataSource:", "updateTime:", "nextPageToken:", "answerText:"} {
+		if strings.Contains(text, unwanted) {
+			t.Fatalf("yaml output %q unexpectedly contains %q", text, unwanted)
+		}
 	}
 }
