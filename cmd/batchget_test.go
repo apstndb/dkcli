@@ -23,7 +23,7 @@ func newTestClient(t *testing.T, handler http.Handler) *apiClient {
 		baseURL: srv.URL + "/v1",
 		apiKey:  "test-key",
 		client:  srv.Client(),
-		limiter: rate.NewLimiter(rate.Inf, 0),
+		limiter: rate.NewLimiter(rate.Inf, 1),
 		verbose: false,
 	}
 }
