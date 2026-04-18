@@ -267,7 +267,7 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 			fmt.Fprintf(os.Stderr, "%s", dump)
 		}
 
-		body, err := checkResponse(resp)
+		respBody, err := checkResponse(resp)
 		var rlErr *rateLimitError
 		if errors.As(err, &rlErr) && attempt < maxRetries-1 {
 			lastErr = err
@@ -284,7 +284,7 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 			backoff *= 2
 			continue
 		}
-		return body, err
+		return respBody, err
 	}
 	return nil, lastErr
 }
