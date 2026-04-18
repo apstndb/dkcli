@@ -41,6 +41,7 @@ var (
 )
 
 const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
+const defaultHTTPTimeout = time.Minute
 
 type authMode int
 
@@ -108,7 +109,7 @@ func apiKeyFromEnv() string {
 func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	client := &apiClient{
 		baseURL: searchBaseURL,
-		client:  &http.Client{},
+		client:  &http.Client{Timeout: defaultHTTPTimeout},
 		ctx:     ctx,
 		limiter: apiLimiter,
 		verbose: verbose,
@@ -130,6 +131,7 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	}
 
 	client.client = oauth2.NewClient(ctx, tokenSource)
+	client.client.Timeout = defaultHTTPTimeout
 	quotaProject, metadata := resolveQuotaProjectID()
 	if quotaProject == "" && metadata.Type == "authorized_user" {
 		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")

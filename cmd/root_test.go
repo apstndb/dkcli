@@ -47,6 +47,9 @@ func TestNewAPIClient_PrefersAPIKey(t *testing.T) {
 	if client.client == http.DefaultClient {
 		t.Fatal("expected a dedicated HTTP client when using API key auth")
 	}
+	if client.client.Timeout != defaultHTTPTimeout {
+		t.Fatalf("timeout = %v, want %v", client.client.Timeout, defaultHTTPTimeout)
+	}
 }
 
 func TestNewAPIClient_FallsBackToADC(t *testing.T) {
@@ -71,6 +74,9 @@ func TestNewAPIClient_FallsBackToADC(t *testing.T) {
 	}
 	if client.client == http.DefaultClient {
 		t.Fatal("expected OAuth HTTP client when falling back to ADC")
+	}
+	if client.client.Timeout != defaultHTTPTimeout {
+		t.Fatalf("timeout = %v, want %v", client.client.Timeout, defaultHTTPTimeout)
 	}
 }
 
