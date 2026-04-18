@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	pageSize   int
-	pageToken  string
-	autoPaging bool
-	maxPages   int
+	pageSize     int
+	pageToken    string
+	autoPaging   bool
+	maxPages     int
+	searchFilter string
 )
 
 var searchCmd = &cobra.Command{
@@ -32,19 +33,21 @@ func init() {
 	searchCmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from previous response")
 	searchCmd.Flags().BoolVarP(&autoPaging, "auto-paging", "a", false, "automatically fetch subsequent pages")
 	searchCmd.Flags().IntVar(&maxPages, "max-pages", 5, "max pages to fetch with --auto-paging (0 for unlimited)")
+	searchCmd.Flags().StringVar(&searchFilter, "filter", "", "AIP-160 filter on document metadata")
 	rootCmd.AddCommand(searchCmd)
 }
 
 // DocumentChunk represents a search result chunk.
 type DocumentChunk struct {
-	Parent  string `json:"parent" yaml:"parent"`
-	ID      string `json:"id" yaml:"id"`
-	Content string `json:"content" yaml:"content"`
+	Parent   string    `json:"parent" yaml:"parent"`
+	ID       string    `json:"id" yaml:"id"`
+	Content  string    `json:"content" yaml:"content"`
+	Document *Document `json:"document,omitempty" yaml:"document,omitempty"`
 }
 
 type searchResponse struct {
 	Results       []DocumentChunk `json:"results" yaml:"results"`
-	NextPageToken string          `json:"nextPageToken,omitempty" yaml:"nextPageToken,omitempty"`
+	NextPageToken string          `json:"nextPageToken,omitempty" yaml:"next_page_token,omitempty"`
 }
 
 // runSearchJSONL streams search results as JSONL, writing each chunk
@@ -58,7 +61,7 @@ func runSearchJSONL(w io.Writer, client *apiClient, query string) error {
 	var lastNextPageToken string
 
 	for {
-		resp, err := client.fetchSearchPage(query, pageSize, token)
+		resp, err := client.fetchSearchPage(query, pageSize, token, searchFilter)
 		if err != nil {
 			return err
 		}
@@ -93,7 +96,7 @@ func runSearchJSONL(w io.Writer, client *apiClient, query string) error {
 	return nil
 }
 
-func (c *apiClient) fetchSearchPage(query string, size int, token string) (*searchResponse, error) {
+func (c *apiClient) fetchSearchPage(query string, size int, token, filter string) (*searchResponse, error) {
 	params := url.Values{}
 	params.Set("query", query)
 	if size > 0 {
@@ -101,6 +104,9 @@ func (c *apiClient) fetchSearchPage(query string, size int, token string) (*sear
 	}
 	if token != "" {
 		params.Set("pageToken", token)
+	}
+	if filter != "" {
+		params.Set("filter", filter)
 	}
 
 	body, err := c.doGet(c.baseURL + "/documents:searchDocumentChunks?" + params.Encode())
@@ -116,7 +122,7 @@ func (c *apiClient) fetchSearchPage(query string, size int, token string) (*sear
 }
 
 func runSearch(cmd *cobra.Command, args []string) error {
-	apiKey, err := getAPIKey()
+	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
 	if err != nil {
 		return err
 	}
@@ -126,7 +132,6 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		pageSize = 20
 	}
 
-	client := newAPIClient(apiKey)
 	query := strings.Join(args, " ")
 
 	w, closer, err := outWriter(outputFile)
@@ -145,7 +150,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	start := time.Now()
 
 	for {
-		resp, err := client.fetchSearchPage(query, pageSize, token)
+		resp, err := client.fetchSearchPage(query, pageSize, token, searchFilter)
 		if err != nil {
 			return err
 		}
@@ -180,6 +185,23 @@ func runSearch(cmd *cobra.Command, args []string) error {
 				sb.WriteString("\n---\n")
 			}
 			fmt.Fprintf(&sb, "## %s [%s]\n\n", chunk.Parent, chunk.ID)
+			if chunk.Document != nil {
+				if chunk.Document.Title != "" {
+					fmt.Fprintf(&sb, "Title: %s\n", chunk.Document.Title)
+				}
+				if chunk.Document.DataSource != "" {
+					fmt.Fprintf(&sb, "Data source: %s\n", chunk.Document.DataSource)
+				}
+				if chunk.Document.UpdateTime != "" {
+					fmt.Fprintf(&sb, "Updated: %s\n", chunk.Document.UpdateTime)
+				}
+				if chunk.Document.URI != "" {
+					fmt.Fprintf(&sb, "URI: %s\n", chunk.Document.URI)
+				}
+				if chunk.Document.Title != "" || chunk.Document.DataSource != "" || chunk.Document.UpdateTime != "" || chunk.Document.URI != "" {
+					sb.WriteByte('\n')
+				}
+			}
 			sb.WriteString(chunk.Content)
 			sb.WriteByte('\n')
 		}

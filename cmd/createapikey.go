@@ -53,8 +53,8 @@ func init() {
 }
 
 type createKeyRequest struct {
-	DisplayName  string            `json:"displayName"`
-	Restrictions keyRestrictions   `json:"restrictions"`
+	DisplayName  string          `json:"displayName"`
+	Restrictions keyRestrictions `json:"restrictions"`
 }
 
 type keyRestrictions struct {
@@ -80,7 +80,6 @@ type lroError struct {
 type keyStringResult struct {
 	KeyString string `json:"keyString"`
 }
-
 
 func resolveProjectID() string {
 	if projectID != "" {
@@ -254,15 +253,4 @@ func extractAPITargets(keyResp map[string]any) []string {
 		}
 	}
 	return services
-}
-
-type quotaProjectTransport struct {
-	Base    http.RoundTripper
-	Project string
-}
-
-func (t *quotaProjectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("x-goog-user-project", t.Project)
-	return t.Base.RoundTrip(req)
 }

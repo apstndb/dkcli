@@ -11,7 +11,7 @@ import (
 
 var (
 	frontmatter bool
-	sizeOnly bool
+	sizeOnly    bool
 )
 
 var getCmd = &cobra.Command{
@@ -37,14 +37,22 @@ func init() {
 type DocumentMeta struct {
 	Name        string `yaml:"name"`
 	URI         string `yaml:"uri"`
+	Title       string `yaml:"title,omitempty"`
 	Description string `yaml:"description,omitempty"`
+	DataSource  string `yaml:"data_source,omitempty"`
+	UpdateTime  string `yaml:"update_time,omitempty"`
+	View        string `yaml:"view,omitempty"`
 }
 
 func formatDocWithFrontmatter(doc *Document) (string, error) {
 	meta := DocumentMeta{
 		Name:        doc.Name,
 		URI:         doc.URI,
+		Title:       doc.Title,
 		Description: doc.Description,
+		DataSource:  doc.DataSource,
+		UpdateTime:  doc.UpdateTime,
+		View:        doc.View,
 	}
 	buf, err := yaml.Marshal(meta)
 	if err != nil {
@@ -71,17 +79,14 @@ func formatDocText(doc *Document) string {
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
-	apiKey, err := getAPIKey()
+	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
 	if err != nil {
 		return err
 	}
-
-	client := newAPIClient(apiKey)
+	client.baseURL = contentBaseURL
 
 	name := normalizeDocName(args[0])
-	url := client.baseURL + "/" + name
-
-	body, err := client.doGet(url)
+	body, err := client.fetchDocument(name)
 	if err != nil {
 		return err
 	}
@@ -122,4 +127,9 @@ func runGet(cmd *cobra.Command, args []string) error {
 	default:
 		return writeFormatted(w, outputFormat, doc)
 	}
+}
+
+func (c *apiClient) fetchDocument(name string) ([]byte, error) {
+	url := c.baseURL + "/" + name
+	return c.doGet(url)
 }

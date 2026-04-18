@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,11 +10,15 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"golang.org/x/time/rate"
 	"gopkg.in/yaml.v3"
 )
@@ -27,7 +32,54 @@ var (
 	verbose      bool
 )
 
-var baseURL = "https://developerknowledge.googleapis.com/v1alpha"
+var (
+	searchBaseURL = "https://developerknowledge.googleapis.com/v1"
+	// Workaround: the live v1 get/batchGet methods currently return INTERNAL,
+	// so content retrieval stays on v1alpha until the backend catches up.
+	contentBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
+	// Workaround: answerQuery is still documented and served on v1alpha.
+	answerQueryBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
+)
+
+const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
+const defaultHTTPTimeout = time.Minute
+
+type authMode int
+
+const authPreferAPIKey authMode = iota
+
+var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+	return google.DefaultTokenSource(ctx, scopes...)
+}
+
+type adcCredentialsMetadata struct {
+	Type           string `json:"type"`
+	QuotaProjectID string `json:"quota_project_id"`
+}
+
+var adcCredentialsPath = func() string {
+	if path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); path != "" {
+		return path
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = ""
+	}
+	return defaultADCCredentialsPath(runtime.GOOS, homeDir, os.Getenv("APPDATA"))
+}
+
+func defaultADCCredentialsPath(goos, homeDir, appData string) string {
+	if goos == "windows" {
+		if appData == "" {
+			return ""
+		}
+		return filepath.Join(appData, "gcloud", "application_default_credentials.json")
+	}
+	if homeDir == "" {
+		return ""
+	}
+	return filepath.Join(homeDir, ".config", "gcloud", "application_default_credentials.json")
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "dkcli",
@@ -52,37 +104,75 @@ type apiClient struct {
 	baseURL string
 	apiKey  string
 	client  *http.Client
+	ctx     context.Context
 	limiter *rate.Limiter
 	verbose bool
 }
 
+func apiKeyFromEnv() string {
+	if key := os.Getenv("DEVELOPERKNOWLEDGE_API_KEY"); key != "" {
+		return key
+	}
+	if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
+		return key
+	}
+	return ""
+}
+
 // newAPIClient creates an apiClient using the global defaults.
-func newAPIClient(apiKey string) *apiClient {
-	return &apiClient{
-		baseURL: baseURL,
-		apiKey:  apiKey,
-		client:  http.DefaultClient,
+func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
+	client := &apiClient{
+		baseURL: searchBaseURL,
+		client:  &http.Client{Timeout: defaultHTTPTimeout},
+		ctx:     ctx,
 		limiter: apiLimiter,
 		verbose: verbose,
 	}
+
+	if mode == authPreferAPIKey {
+		if apiKey := apiKeyFromEnv(); apiKey != "" {
+			client.apiKey = apiKey
+			return client, nil
+		}
+	}
+
+	tokenSource, err := defaultTokenSource(ctx, cloudPlatformScope)
+	if err != nil {
+		if mode == authPreferAPIKey {
+			return nil, fmt.Errorf("set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY, or configure ADC with 'gcloud auth application-default login': %w", err)
+		}
+		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
+	}
+
+	client.client = oauth2.NewClient(ctx, tokenSource)
+	client.client.Timeout = defaultHTTPTimeout
+	quotaProject, metadata := resolveQuotaProjectID()
+	if quotaProject == "" && metadata.Type == "authorized_user" {
+		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
+	}
+	if quotaProject != "" {
+		baseTransport := client.client.Transport
+		if baseTransport == nil {
+			baseTransport = http.DefaultTransport
+		}
+		client.client.Transport = &quotaProjectTransport{
+			Base:    baseTransport,
+			Project: quotaProject,
+		}
+	}
+	return client, nil
 }
 
 // Document represents a Developer Knowledge API document.
 type Document struct {
 	Name        string `json:"name" yaml:"name"`
 	URI         string `json:"uri" yaml:"uri"`
-	Content     string `json:"content" yaml:"content"`
-	Description string `json:"description" yaml:"description"`
-}
-
-func getAPIKey() (string, error) {
-	if key := os.Getenv("DEVELOPERKNOWLEDGE_API_KEY"); key != "" {
-		return key, nil
-	}
-	if key := os.Getenv("GOOGLE_API_KEY"); key != "" {
-		return key, nil
-	}
-	return "", fmt.Errorf("set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY")
+	Content     string `json:"content,omitempty" yaml:"content,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	DataSource  string `json:"dataSource,omitempty" yaml:"data_source,omitempty"`
+	Title       string `json:"title,omitempty" yaml:"title,omitempty"`
+	UpdateTime  string `json:"updateTime,omitempty" yaml:"update_time,omitempty"`
+	View        string `json:"view,omitempty" yaml:"view,omitempty"`
 }
 
 // apiError represents a non-OK HTTP response from the API.
@@ -155,23 +245,38 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 	return body, nil
 }
 
-func (c *apiClient) doGet(url string) ([]byte, error) {
+func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType string) ([]byte, error) {
 	const maxRetries = 3
 	backoff := 1 * time.Second
+	ctx := c.requestContext()
+	var retryErr error
 
-	for attempt := range maxRetries {
-		if err := c.limiter.Wait(context.Background()); err != nil {
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if err := c.limiter.Wait(ctx); err != nil {
 			return nil, err
 		}
 
-		req, err := http.NewRequest(http.MethodGet, url, nil)
+		var requestBody io.Reader
+		if body != nil {
+			requestBody = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, url, requestBody)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("x-goog-api-key", c.apiKey)
+		if c.apiKey != "" {
+			req.Header.Set("x-goog-api-key", c.apiKey)
+		}
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
 
 		resp, err := c.client.Do(req)
 		if err != nil {
+			if resp != nil && resp.Body != nil {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
 			return nil, err
 		}
 
@@ -180,9 +285,13 @@ func (c *apiClient) doGet(url string) ([]byte, error) {
 			fmt.Fprintf(os.Stderr, "%s", dump)
 		}
 
-		body, err := checkResponse(resp)
+		respBody, err := checkResponse(resp)
 		var rlErr *rateLimitError
-		if errors.As(err, &rlErr) && attempt < maxRetries-1 {
+		if errors.As(err, &rlErr) {
+			retryErr = err
+			if attempt == maxRetries-1 {
+				break
+			}
 			wait := backoff
 			if rlErr.RetryAfter > 0 {
 				wait = rlErr.RetryAfter
@@ -190,14 +299,41 @@ func (c *apiClient) doGet(url string) ([]byte, error) {
 			if c.verbose {
 				fmt.Fprintf(os.Stderr, "Rate limited, retrying after %v...\n", wait)
 			}
-			time.Sleep(wait)
+			if err := sleepContext(ctx, wait); err != nil {
+				return nil, err
+			}
 			backoff *= 2
 			continue
 		}
-		return body, err
+		return respBody, err
 	}
-	// unreachable
-	return nil, fmt.Errorf("exceeded max retries")
+	return nil, retryErr
+}
+
+func (c *apiClient) requestContext() context.Context {
+	if c.ctx != nil {
+		return c.ctx
+	}
+	return context.Background()
+}
+
+func sleepContext(ctx context.Context, wait time.Duration) error {
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (c *apiClient) doGet(url string) ([]byte, error) {
+	return c.doAPIRequest(http.MethodGet, url, nil, "")
+}
+
+func (c *apiClient) doJSONPost(url string, body []byte) ([]byte, error) {
+	return c.doAPIRequest(http.MethodPost, url, body, "application/json")
 }
 
 func normalizeDocName(name string) string {
@@ -207,6 +343,42 @@ func normalizeDocName(name string) string {
 		name = "documents/" + name
 	}
 	return name
+}
+
+func loadADCCredentialsMetadata() adcCredentialsMetadata {
+	path := adcCredentialsPath()
+	if path == "" {
+		return adcCredentialsMetadata{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return adcCredentialsMetadata{}
+	}
+	var cfg adcCredentialsMetadata
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return adcCredentialsMetadata{}
+	}
+	return cfg
+}
+
+func resolveQuotaProjectID() (string, adcCredentialsMetadata) {
+	if p := os.Getenv("GOOGLE_CLOUD_QUOTA_PROJECT"); p != "" {
+		return p, adcCredentialsMetadata{}
+	}
+
+	cfg := loadADCCredentialsMetadata()
+	return cfg.QuotaProjectID, cfg
+}
+
+type quotaProjectTransport struct {
+	Base    http.RoundTripper
+	Project string
+}
+
+func (t *quotaProjectTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("x-goog-user-project", t.Project)
+	return t.Base.RoundTrip(req)
 }
 
 // outWriter returns the writer for command output.

@@ -10,7 +10,7 @@ go install github.com/apstndb/dkcli@latest
 
 ## Authentication
 
-Most commands use an API key. Set one of the following environment variables:
+Developer Knowledge API commands prefer an API key when one is configured, except `create-api-key`:
 
 ```
 export DEVELOPERKNOWLEDGE_API_KEY=<your-key>
@@ -18,11 +18,13 @@ export DEVELOPERKNOWLEDGE_API_KEY=<your-key>
 export GOOGLE_API_KEY=<your-key>
 ```
 
-The `create-api-key` command uses Application Default Credentials instead:
+If neither variable is set, dkcli falls back to an OAuth access token from Application Default Credentials:
 
 ```
 gcloud auth application-default login
 ```
+
+When using local ADC, the Developer Knowledge API also requires a quota project. dkcli reads that from `GOOGLE_CLOUD_QUOTA_PROJECT` or `quota_project_id` in the ADC file. The standard way to set that up is `gcloud auth application-default set-quota-project <project-id>`.
 
 ## Usage
 
@@ -34,19 +36,27 @@ dkcli search "how to create a Cloud Storage bucket"
 # Auto-paging fetches subsequent pages automatically (default max: 5 pages)
 dkcli search -a "Cloud Storage"
 
+# Restrict results to a specific corpus source
+dkcli search --filter 'dataSource = "docs.cloud.google.com"' "BigQuery"
+
 # Fetch more pages
 dkcli search -a --max-pages 20 "Cloud Storage"
 ```
 
 ### Get a document
 
+Currently this uses the `v1alpha` document endpoint as a workaround because the live `v1` `get` method is returning `INTERNAL`.
+
 ```
 dkcli get docs.cloud.google.com/storage/docs/creating-buckets
 # Full URL also works
 dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
+
 ```
 
 ### Get multiple documents
+
+Currently this uses the `v1alpha` document endpoint as a workaround because the live `v1` `batchGet` method is returning `INTERNAL`.
 
 ```
 dkcli batch-get docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2
@@ -56,6 +66,7 @@ dkcli batch-get --outdir out docs.cloud.google.com/path/to/doc1 docs.cloud.googl
 
 # With YAML frontmatter
 dkcli batch-get --outdir out --frontmatter docs.cloud.google.com/path/to/doc1
+
 ```
 
 ### Create an API key
@@ -67,6 +78,14 @@ dkcli create-api-key --project my-gcp-project
 # or
 export GOOGLE_CLOUD_PROJECT=my-gcp-project
 dkcli create-api-key
+```
+
+### Answer a grounded query
+
+Uses the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC if a quota project is available.
+
+```
+dkcli answer-query "How do I create a Cloud Storage bucket?"
 ```
 
 ## Global flags
@@ -87,6 +106,7 @@ dkcli create-api-key
 | `--page-token` | Pagination token from previous response |
 | `--auto-paging`, `-a` | Automatically fetch subsequent pages |
 | `--max-pages` | Max pages to fetch with `--auto-paging` (default: 5, 0 for unlimited) |
+| `--filter` | AIP-160 filter on document metadata |
 
 ### `get`
 
@@ -110,4 +130,4 @@ dkcli create-api-key
 
 ## Rate limiting
 
-The Developer Knowledge API has a 100 RPM quota (Preview). dkcli includes a built-in rate limiter (burst 5, then ~1.67 req/s) and automatic retry with exponential backoff on HTTP 429 responses.
+The Developer Knowledge API has a 100 RPM quota. dkcli includes a built-in rate limiter (burst 5, then ~1.67 req/s) and automatic retry with exponential backoff on HTTP 429 responses.
