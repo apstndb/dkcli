@@ -33,12 +33,8 @@ func TestAnswerQuery(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	origURL := answerQueryURL
-	answerQueryURL = srv.URL + "/v1alpha:answerQuery"
-	t.Cleanup(func() { answerQueryURL = origURL })
-
 	client := &apiClient{
-		baseURL: srv.URL + "/v1",
+		baseURL: srv.URL + "/v1alpha",
 		client:  srv.Client(),
 		limiter: rate.NewLimiter(rate.Inf, 1),
 	}

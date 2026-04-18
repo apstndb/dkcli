@@ -42,7 +42,7 @@ func (c *apiClient) answerQuery(query string) (*answerQueryResponse, error) {
 		return nil, err
 	}
 
-	body, err := c.doJSONPost(answerQueryURL, reqBody)
+	body, err := c.doJSONPost(c.baseURL+":answerQuery", reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -59,6 +59,7 @@ func runAnswerQuery(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	client.baseURL = answerQueryBaseURL
 
 	resp, err := client.answerQuery(strings.Join(args, " "))
 	if err != nil {

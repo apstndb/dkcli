@@ -37,7 +37,7 @@ var (
 	// so content retrieval stays on v1alpha until the backend catches up.
 	contentBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
 	// Workaround: answerQuery is still documented and served on v1alpha.
-	answerQueryURL = "https://developerknowledge.googleapis.com/v1alpha:answerQuery"
+	answerQueryBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
 )
 
 const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
