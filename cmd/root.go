@@ -235,7 +235,7 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 	const maxRetries = 3
 	backoff := 1 * time.Second
 	ctx := c.requestContext()
-	var lastErr error
+	var retryErr error
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if err := c.limiter.Wait(ctx); err != nil {
@@ -269,8 +269,11 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 
 		respBody, err := checkResponse(resp)
 		var rlErr *rateLimitError
-		if errors.As(err, &rlErr) && attempt < maxRetries-1 {
-			lastErr = err
+		if errors.As(err, &rlErr) {
+			retryErr = err
+			if attempt == maxRetries-1 {
+				break
+			}
 			wait := backoff
 			if rlErr.RetryAfter > 0 {
 				wait = rlErr.RetryAfter
@@ -286,7 +289,7 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 		}
 		return respBody, err
 	}
-	return nil, lastErr
+	return nil, retryErr
 }
 
 func (c *apiClient) requestContext() context.Context {
