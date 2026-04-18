@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -60,11 +61,24 @@ var adcCredentialsPath = func() string {
 	if path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); path != "" {
 		return path
 	}
-	configDir, err := os.UserConfigDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
+		homeDir = ""
+	}
+	return defaultADCCredentialsPath(runtime.GOOS, homeDir, os.Getenv("APPDATA"))
+}
+
+func defaultADCCredentialsPath(goos, homeDir, appData string) string {
+	if goos == "windows" {
+		if appData == "" {
+			return ""
+		}
+		return filepath.Join(appData, "gcloud", "application_default_credentials.json")
+	}
+	if homeDir == "" {
 		return ""
 	}
-	return filepath.Join(configDir, "gcloud", "application_default_credentials.json")
+	return filepath.Join(homeDir, ".config", "gcloud", "application_default_credentials.json")
 }
 
 var rootCmd = &cobra.Command{
@@ -259,6 +273,10 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 
 		resp, err := c.client.Do(req)
 		if err != nil {
+			if resp != nil && resp.Body != nil {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
 			return nil, err
 		}
 

@@ -143,6 +143,52 @@ func TestResolveQuotaProjectIDFromADCFile(t *testing.T) {
 	}
 }
 
+func TestDefaultADCCredentialsPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		goos    string
+		homeDir string
+		appData string
+		want    string
+	}{
+		{
+			name:    "darwin uses xdg-compatible gcloud path",
+			goos:    "darwin",
+			homeDir: "/Users/alice",
+			want:    filepath.Join("/Users/alice", ".config", "gcloud", "application_default_credentials.json"),
+		},
+		{
+			name:    "linux uses xdg-compatible gcloud path",
+			goos:    "linux",
+			homeDir: "/home/alice",
+			want:    filepath.Join("/home/alice", ".config", "gcloud", "application_default_credentials.json"),
+		},
+		{
+			name:    "windows uses APPDATA",
+			goos:    "windows",
+			appData: filepath.Join("C:", "Users", "alice", "AppData", "Roaming"),
+			want:    filepath.Join("C:", "Users", "alice", "AppData", "Roaming", "gcloud", "application_default_credentials.json"),
+		},
+		{
+			name: "windows without APPDATA returns empty",
+			goos: "windows",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := defaultADCCredentialsPath(tt.goos, tt.homeDir, tt.appData)
+			if got != tt.want {
+				t.Fatalf("defaultADCCredentialsPath(%q, %q, %q) = %q, want %q", tt.goos, tt.homeDir, tt.appData, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNewAPIClient_FailsFastWithoutQuotaProjectForUserADC(t *testing.T) {
 	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")
