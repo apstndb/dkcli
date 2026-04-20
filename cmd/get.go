@@ -83,7 +83,6 @@ func runGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	client.baseURL = contentBaseURL
 
 	name := normalizeDocName(args[0])
 	body, err := client.fetchDocument(name)

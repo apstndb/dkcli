@@ -45,8 +45,6 @@ dkcli search -a --max-pages 20 "Cloud Storage"
 
 ### Get a document
 
-Currently this uses the `v1alpha` document endpoint as a workaround because the live `v1` `get` method is returning `INTERNAL`.
-
 ```
 dkcli get docs.cloud.google.com/storage/docs/creating-buckets
 # Full URL also works
@@ -55,8 +53,6 @@ dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
 ```
 
 ### Get multiple documents
-
-Currently this uses the `v1alpha` document endpoint as a workaround because the live `v1` `batchGet` method is returning `INTERNAL`.
 
 ```
 dkcli batch-get docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2

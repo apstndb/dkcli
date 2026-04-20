@@ -119,7 +119,7 @@ func TestFetchGet(t *testing.T) {
 	}
 
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1alpha/documents/example.com/page" {
+		if r.URL.Path != "/v1/documents/example.com/page" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -128,7 +128,6 @@ func TestFetchGet(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(doc)
 	}))
-	client.baseURL = strings.TrimSuffix(client.baseURL, "/v1") + "/v1alpha"
 
 	url := client.baseURL + "/documents/example.com/page"
 	body, err := client.doGet(url)

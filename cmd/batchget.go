@@ -291,7 +291,6 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	client.baseURL = contentBaseURL
 
 	var docs []Document
 	var docErrs []error

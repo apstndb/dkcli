@@ -34,9 +34,6 @@ var (
 
 var (
 	searchBaseURL = "https://developerknowledge.googleapis.com/v1"
-	// Workaround: the live v1 get/batchGet methods currently return INTERNAL,
-	// so content retrieval stays on v1alpha until the backend catches up.
-	contentBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
 	// Workaround: answerQuery is still documented and served on v1alpha.
 	answerQueryBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
 )

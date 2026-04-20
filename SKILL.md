@@ -194,7 +194,7 @@ If the user already has a key, they just need to set the environment variable:
 export DEVELOPERKNOWLEDGE_API_KEY=<key>
 ```
 
-Note: `get` and `batch-get` currently stay on `v1alpha` as a workaround because the live `v1` methods have been returning `INTERNAL` in direct testing, even though the GA docs and proto exist.
+Note: `get` and `batch-get` use the GA `v1` document endpoints. `answer-query` still uses `v1alpha:answerQuery`.
 
 ## Command reference
 
