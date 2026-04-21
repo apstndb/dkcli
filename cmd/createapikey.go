@@ -104,26 +104,35 @@ func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
 		return os.Stdout, func() {}, nil
 	}
 
-	info, err := os.Lstat(file)
+	f, err := openExistingCreateAPIKeyFile(file)
 	switch {
 	case err == nil:
-		if info.Mode()&os.ModeSymlink != 0 {
-			return nil, nil, fmt.Errorf("refusing to write secret to symlink %q", file)
+		info, err := f.Stat()
+		if err != nil {
+			_ = f.Close()
+			return nil, nil, err
 		}
 		if !info.Mode().IsRegular() {
+			_ = f.Close()
 			return nil, nil, fmt.Errorf("refusing to write secret to non-regular file %q", file)
 		}
 		if runtime.GOOS != "windows" {
 			perms := info.Mode().Perm()
 			if perms&0o077 != 0 {
+				_ = f.Close()
 				return nil, nil, fmt.Errorf("refusing to write secret to %q with permissions %04o; use owner-only permissions with owner write (for example 0600)", file, perms)
 			}
 			if perms&0o200 == 0 {
+				_ = f.Close()
 				return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example 0600)", file)
 			}
 		}
-		f, err := os.OpenFile(file, os.O_WRONLY|os.O_TRUNC, 0)
-		if err != nil {
+		if err := f.Truncate(0); err != nil {
+			_ = f.Close()
+			return nil, nil, err
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			_ = f.Close()
 			return nil, nil, err
 		}
 		return f, func() { f.Close() }, nil
@@ -134,6 +143,15 @@ func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
 		}
 		return f, func() { f.Close() }, nil
 	default:
+		if runtime.GOOS != "windows" && errors.Is(err, os.ErrPermission) {
+			info, statErr := os.Lstat(file)
+			if statErr == nil && info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular() {
+				perms := info.Mode().Perm()
+				if perms&0o077 == 0 && perms&0o200 == 0 {
+					return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example 0600)", file)
+				}
+			}
+		}
 		return nil, nil, err
 	}
 }
