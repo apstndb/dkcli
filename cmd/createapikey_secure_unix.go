@@ -10,7 +10,7 @@ import (
 )
 
 func openExistingCreateAPIKeyFile(file string) (*os.File, error) {
-	fd, err := syscall.Open(file, syscall.O_WRONLY|syscall.O_NOFOLLOW, 0)
+	fd, err := syscall.Open(file, syscall.O_WRONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		if errors.Is(err, syscall.ELOOP) {
 			return nil, fmt.Errorf("refusing to write secret to symlink %q", file)

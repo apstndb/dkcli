@@ -179,6 +179,9 @@ func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
 	if err := os.WriteFile(path, []byte("old"), createAPIKeyFileMode); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(path, createAPIKeyFileMode); err != nil {
+		t.Fatal(err)
+	}
 
 	w, closer, err := createAPIKeyOutWriter(path)
 	if err != nil {

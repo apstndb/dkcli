@@ -141,6 +141,10 @@ func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
 		if err != nil {
 			return nil, nil, err
 		}
+		if err := f.Chmod(createAPIKeyFileMode); err != nil {
+			_ = f.Close()
+			return nil, nil, err
+		}
 		return f, func() { f.Close() }, nil
 	default:
 		if runtime.GOOS != "windows" && errors.Is(err, os.ErrPermission) {
