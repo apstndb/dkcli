@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -11,13 +13,18 @@ import (
 
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 )
 
 var (
 	projectID   string
 	displayName string
 	keyOnly     bool
+)
+
+var (
+	apiKeysBaseURL             = "https://apikeys.googleapis.com/v2"
+	createAPIKeyPollInterval   = 2 * time.Second
+	createAPIKeyRequestTimeout = defaultHTTPTimeout
 )
 
 var createAPIKeyCmd = &cobra.Command{
@@ -94,6 +101,47 @@ func resolveProjectID() string {
 	return ""
 }
 
+func newAPIKeysClient(ctx context.Context, project string) (*http.Client, error) {
+	ts, err := defaultTokenSource(ctx, cloudPlatformScope)
+	if err != nil {
+		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
+	}
+
+	client := oauth2.NewClient(ctx, ts)
+	client.Timeout = defaultHTTPTimeout
+
+	baseTransport := client.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	client.Transport = &quotaProjectTransport{
+		Base:    baseTransport,
+		Project: project,
+	}
+	return client, nil
+}
+
+func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url string, body []byte, contentType string) ([]byte, error) {
+	var requestBody io.Reader
+	if body != nil {
+		requestBody = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, requestBody)
+	if err != nil {
+		return nil, err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return checkResponse(resp)
+}
+
 func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	project := resolveProjectID()
 	if project == "" {
@@ -102,15 +150,9 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
-	ts, err := google.DefaultTokenSource(ctx, "https://www.googleapis.com/auth/cloud-platform")
+	client, err := newAPIKeysClient(ctx, project)
 	if err != nil {
-		return fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
-	}
-	client := &http.Client{
-		Transport: &quotaProjectTransport{
-			Base:    &oauth2.Transport{Source: ts},
-			Project: project,
-		},
+		return err
 	}
 
 	// Create the API key
@@ -126,12 +168,8 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	createURL := fmt.Sprintf("https://apikeys.googleapis.com/v2/projects/%s/locations/global/keys", project)
-	resp, err := client.Post(createURL, "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		return err
-	}
-	body, err := checkResponse(resp)
+	createURL := fmt.Sprintf("%s/projects/%s/locations/global/keys", apiKeysBaseURL, project)
+	body, err := doAPIKeysRequest(ctx, client, http.MethodPost, createURL, reqBody, "application/json")
 	if err != nil {
 		return err
 	}
@@ -142,21 +180,20 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	// Poll until done
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(createAPIKeyRequestTimeout)
 	for !op.Done {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("operation timed out: %s", op.Name)
 		}
-		time.Sleep(2 * time.Second)
+		if err := sleepContext(ctx, createAPIKeyPollInterval); err != nil {
+			return err
+		}
 
 		if verbose {
 			fmt.Fprintf(os.Stderr, "Polling operation %s...\n", op.Name)
 		}
-		pollResp, err := client.Get("https://apikeys.googleapis.com/v2/" + op.Name)
-		if err != nil {
-			return err
-		}
-		pollBody, err := checkResponse(pollResp)
+		pollURL := fmt.Sprintf("%s/%s", apiKeysBaseURL, op.Name)
+		pollBody, err := doAPIKeysRequest(ctx, client, http.MethodGet, pollURL, nil, "")
 		if err != nil {
 			return err
 		}
@@ -188,11 +225,8 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get key string (separate endpoint; not included in create response).
-	ksResp, err := client.Get(fmt.Sprintf("https://apikeys.googleapis.com/v2/%s/keyString", keyName))
-	if err != nil {
-		return err
-	}
-	ksBody, err := checkResponse(ksResp)
+	ksURL := fmt.Sprintf("%s/%s/keyString", apiKeysBaseURL, keyName)
+	ksBody, err := doAPIKeysRequest(ctx, client, http.MethodGet, ksURL, nil, "")
 	if err != nil {
 		return err
 	}

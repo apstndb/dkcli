@@ -1,9 +1,16 @@
 package cmd
 
 import (
+	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/spf13/cobra"
+	"golang.org/x/oauth2"
 )
 
 func TestResolveProjectID(t *testing.T) {
@@ -119,5 +126,136 @@ func TestQuotaProjectTransport(t *testing.T) {
 
 	if gotHeader != "my-project" {
 		t.Errorf("x-goog-user-project = %q, want %q", gotHeader, "my-project")
+	}
+}
+
+func TestNewAPIKeysClient_UsesDefaultTimeout(t *testing.T) {
+	orig := defaultTokenSource
+	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+		if len(scopes) != 1 || scopes[0] != cloudPlatformScope {
+			t.Fatalf("scopes = %v, want [%q]", scopes, cloudPlatformScope)
+		}
+		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
+	}
+	t.Cleanup(func() { defaultTokenSource = orig })
+
+	client, err := newAPIKeysClient(context.Background(), "test-project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.Timeout != defaultHTTPTimeout {
+		t.Fatalf("timeout = %v, want %v", client.Timeout, defaultHTTPTimeout)
+	}
+}
+
+func TestDoAPIKeysRequest_UsesRequestContext(t *testing.T) {
+	type contextKey string
+
+	ctx := context.WithValue(context.Background(), contextKey("test"), "value")
+	called := false
+	client := &http.Client{
+		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			called = true
+			if got := req.Context().Value(contextKey("test")); got != "value" {
+				t.Fatalf("request context value = %v, want %q", got, "value")
+			}
+			return nil, context.Canceled
+		}),
+	}
+
+	_, err := doAPIKeysRequest(ctx, client, http.MethodGet, "https://example.com", nil, "")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if !called {
+		t.Fatal("expected request to reach transport")
+	}
+}
+
+func TestRunCreateAPIKey_HonorsCancellationWhilePolling(t *testing.T) {
+	origProjectID := projectID
+	origDisplayName := displayName
+	origKeyOnly := keyOnly
+	origOutputFormat := outputFormat
+	origOutputFile := outputFile
+	origVerbose := verbose
+	origBaseURL := apiKeysBaseURL
+	origPollInterval := createAPIKeyPollInterval
+	origRequestTimeout := createAPIKeyRequestTimeout
+	t.Cleanup(func() {
+		projectID = origProjectID
+		displayName = origDisplayName
+		keyOnly = origKeyOnly
+		outputFormat = origOutputFormat
+		outputFile = origOutputFile
+		verbose = origVerbose
+		apiKeysBaseURL = origBaseURL
+		createAPIKeyPollInterval = origPollInterval
+		createAPIKeyRequestTimeout = origRequestTimeout
+	})
+
+	projectID = "test-project"
+	displayName = "dkcli"
+	keyOnly = false
+	outputFormat = "text"
+	outputFile = ""
+	verbose = false
+	createAPIKeyPollInterval = time.Hour
+	createAPIKeyRequestTimeout = 2 * time.Hour
+
+	origTokenSource := defaultTokenSource
+	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
+	}
+	t.Cleanup(func() { defaultTokenSource = origTokenSource })
+
+	created := make(chan struct{}, 1)
+	polls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v2/projects/test-project/locations/global/keys":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"name":"operations/test-op","done":false}`)
+			select {
+			case created <- struct{}{}:
+			default:
+			}
+		case r.Method == http.MethodGet && r.URL.Path == "/v2/operations/test-op":
+			polls++
+			t.Fatalf("unexpected poll request after cancellation")
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	apiKeysBaseURL = srv.URL + "/v2"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := &cobra.Command{}
+	cmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runCreateAPIKey(cmd, nil)
+	}()
+
+	select {
+	case <-created:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for create request")
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runCreateAPIKey did not exit after cancellation")
+	}
+
+	if polls != 0 {
+		t.Fatalf("polls = %d, want 0", polls)
 	}
 }
