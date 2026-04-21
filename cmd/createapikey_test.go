@@ -184,10 +184,10 @@ func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer closer()
 	if _, err := w.Write([]byte("new")); err != nil {
 		t.Fatal(err)
 	}
-	closer()
 
 	got, err := os.ReadFile(path)
 	if err != nil {
