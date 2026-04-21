@@ -197,3 +197,46 @@ func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
 		t.Fatalf("contents = %q, want %q", got, "new")
 	}
 }
+
+func TestCreateAPIKeyOutWriter_RejectsExistingOwnerOnlyReadOnlyFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not reliable on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := createAPIKeyOutWriter(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "owner write") {
+		t.Fatalf("error = %q, want owner write guidance", err)
+	}
+}
+
+func TestCreateAPIKeyOutWriter_RejectsSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink setup varies on Windows")
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("old"), createAPIKeyFileMode); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "secret-link.txt")
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := createAPIKeyOutWriter(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("error = %q, want symlink guidance", err)
+	}
+}

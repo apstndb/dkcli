@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -103,14 +104,23 @@ func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
 		return os.Stdout, func() {}, nil
 	}
 
-	info, err := os.Stat(file)
+	info, err := os.Lstat(file)
 	switch {
 	case err == nil:
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, nil, fmt.Errorf("refusing to write secret to symlink %q", file)
+		}
 		if !info.Mode().IsRegular() {
 			return nil, nil, fmt.Errorf("refusing to write secret to non-regular file %q", file)
 		}
-		if info.Mode().Perm()&0o077 != 0 {
-			return nil, nil, fmt.Errorf("refusing to write secret to %q with permissions %04o; use 0600 or stricter", file, info.Mode().Perm())
+		if runtime.GOOS != "windows" {
+			perms := info.Mode().Perm()
+			if perms&0o077 != 0 {
+				return nil, nil, fmt.Errorf("refusing to write secret to %q with permissions %04o; use owner-only permissions with owner write (for example 0600)", file, perms)
+			}
+			if perms&0o200 == 0 {
+				return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example 0600)", file)
+			}
 		}
 		f, err := os.OpenFile(file, os.O_WRONLY|os.O_TRUNC, 0)
 		if err != nil {
