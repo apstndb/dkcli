@@ -160,6 +160,9 @@ func TestCreateAPIKeyOutWriter_RejectsExistingFilesWithBroadPermissions(t *testi
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	_, _, err := createAPIKeyOutWriter(path)
 	if err == nil {
