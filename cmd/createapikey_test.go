@@ -181,7 +181,7 @@ func TestRunCreateAPIKey_HonorsCancellationWhilePolling(t *testing.T) {
 	origVerbose := verbose
 	origBaseURL := apiKeysBaseURL
 	origPollInterval := createAPIKeyPollInterval
-	origRequestTimeout := createAPIKeyRequestTimeout
+	origRequestTimeout := createAPIKeyOperationTimeout
 	t.Cleanup(func() {
 		projectID = origProjectID
 		displayName = origDisplayName
@@ -191,7 +191,7 @@ func TestRunCreateAPIKey_HonorsCancellationWhilePolling(t *testing.T) {
 		verbose = origVerbose
 		apiKeysBaseURL = origBaseURL
 		createAPIKeyPollInterval = origPollInterval
-		createAPIKeyRequestTimeout = origRequestTimeout
+		createAPIKeyOperationTimeout = origRequestTimeout
 	})
 
 	projectID = "test-project"
@@ -201,7 +201,7 @@ func TestRunCreateAPIKey_HonorsCancellationWhilePolling(t *testing.T) {
 	outputFile = ""
 	verbose = false
 	createAPIKeyPollInterval = time.Hour
-	createAPIKeyRequestTimeout = 2 * time.Hour
+	createAPIKeyOperationTimeout = 2 * time.Hour
 
 	origTokenSource := defaultTokenSource
 	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {

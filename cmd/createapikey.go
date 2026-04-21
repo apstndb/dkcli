@@ -22,9 +22,9 @@ var (
 )
 
 var (
-	apiKeysBaseURL             = "https://apikeys.googleapis.com/v2"
-	createAPIKeyPollInterval   = 2 * time.Second
-	createAPIKeyRequestTimeout = defaultHTTPTimeout
+	apiKeysBaseURL               = "https://apikeys.googleapis.com/v2"
+	createAPIKeyPollInterval     = 2 * time.Second
+	createAPIKeyOperationTimeout = defaultHTTPTimeout
 )
 
 var createAPIKeyCmd = &cobra.Command{
@@ -137,6 +137,10 @@ func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url stri
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if resp != nil && resp.Body != nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}
 		return nil, err
 	}
 	return checkResponse(resp)
@@ -180,7 +184,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	// Poll until done
-	deadline := time.Now().Add(createAPIKeyRequestTimeout)
+	deadline := time.Now().Add(createAPIKeyOperationTimeout)
 	for !op.Done {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("operation timed out: %s", op.Name)
