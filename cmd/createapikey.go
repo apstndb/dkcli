@@ -3,7 +3,9 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -81,6 +83,8 @@ type keyStringResult struct {
 	KeyString string `json:"keyString"`
 }
 
+const createAPIKeyFileMode = 0o600
+
 func resolveProjectID() string {
 	if projectID != "" {
 		return projectID
@@ -92,6 +96,36 @@ func resolveProjectID() string {
 		return p
 	}
 	return ""
+}
+
+func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
+	if file == "" {
+		return os.Stdout, func() {}, nil
+	}
+
+	info, err := os.Stat(file)
+	switch {
+	case err == nil:
+		if !info.Mode().IsRegular() {
+			return nil, nil, fmt.Errorf("refusing to write secret to non-regular file %q", file)
+		}
+		if info.Mode().Perm()&0o077 != 0 {
+			return nil, nil, fmt.Errorf("refusing to write secret to %q with permissions %04o; use 0600 or stricter", file, info.Mode().Perm())
+		}
+		f, err := os.OpenFile(file, os.O_WRONLY|os.O_TRUNC, 0)
+		if err != nil {
+			return nil, nil, err
+		}
+		return f, func() { f.Close() }, nil
+	case errors.Is(err, os.ErrNotExist):
+		f, err := os.OpenFile(file, os.O_CREATE|os.O_EXCL|os.O_WRONLY, createAPIKeyFileMode)
+		if err != nil {
+			return nil, nil, err
+		}
+		return f, func() { f.Close() }, nil
+	default:
+		return nil, nil, err
+	}
 }
 
 func runCreateAPIKey(cmd *cobra.Command, args []string) error {
@@ -205,7 +239,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	// Add keyString to the full key resource for structured output.
 	keyResp["keyString"] = ks.KeyString
 
-	w, closer, err := outWriter(outputFile)
+	w, closer, err := createAPIKeyOutWriter(outputFile)
 	if err != nil {
 		return err
 	}

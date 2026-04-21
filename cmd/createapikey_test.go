@@ -3,6 +3,10 @@ package cmd
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -119,5 +123,77 @@ func TestQuotaProjectTransport(t *testing.T) {
 
 	if gotHeader != "my-project" {
 		t.Errorf("x-goog-user-project = %q, want %q", gotHeader, "my-project")
+	}
+}
+
+func TestCreateAPIKeyOutWriter_CreatesFilesWithOwnerOnlyPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not reliable on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	w, closer, err := createAPIKeyOutWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closer()
+
+	if _, err := w.Write([]byte("secret")); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != createAPIKeyFileMode {
+		t.Fatalf("permissions = %04o, want %04o", got, createAPIKeyFileMode)
+	}
+}
+
+func TestCreateAPIKeyOutWriter_RejectsExistingFilesWithBroadPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not reliable on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := createAPIKeyOutWriter(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "0600") {
+		t.Fatalf("error = %q, want 0600 guidance", err)
+	}
+}
+
+func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not reliable on Windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("old"), createAPIKeyFileMode); err != nil {
+		t.Fatal(err)
+	}
+
+	w, closer, err := createAPIKeyOutWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("new")); err != nil {
+		t.Fatal(err)
+	}
+	closer()
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new" {
+		t.Fatalf("contents = %q, want %q", got, "new")
 	}
 }
