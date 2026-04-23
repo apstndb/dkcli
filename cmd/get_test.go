@@ -151,24 +151,30 @@ func TestFetchGet(t *testing.T) {
 }
 
 func TestRunGet_FrontmatterRequiresTextFormat(t *testing.T) {
-	origFrontmatter := frontmatter
-	origOutputFormat := outputFormat
-	t.Cleanup(func() {
-		frontmatter = origFrontmatter
-		outputFormat = origOutputFormat
-	})
+	tests := []string{"json", "jsonl", "yaml", "txtar"}
 
-	frontmatter = true
-	outputFormat = "json"
+	for _, format := range tests {
+		t.Run(format, func(t *testing.T) {
+			origFrontmatter := frontmatter
+			origOutputFormat := outputFormat
+			t.Cleanup(func() {
+				frontmatter = origFrontmatter
+				outputFormat = origOutputFormat
+			})
 
-	cmd := &cobra.Command{}
-	cmd.SetContext(context.Background())
+			frontmatter = true
+			outputFormat = format
 
-	err := runGet(cmd, []string{"documents/example.com/page"})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if err.Error() != "--frontmatter can only be used with text format" {
-		t.Fatalf("error = %q, want %q", err.Error(), "--frontmatter can only be used with text format")
+			cmd := &cobra.Command{}
+			cmd.SetContext(context.Background())
+
+			err := runGet(cmd, []string{"documents/example.com/page"})
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if err.Error() != "--frontmatter is only supported with --format=text" {
+				t.Fatalf("error = %q, want %q", err.Error(), "--frontmatter is only supported with --format=text")
+			}
+		})
 	}
 }

@@ -28,7 +28,7 @@ The document name can be specified as:
 }
 
 func init() {
-	getCmd.Flags().BoolVar(&frontmatter, "frontmatter", false, "prepend YAML frontmatter to content")
+	getCmd.Flags().BoolVar(&frontmatter, "frontmatter", false, "prepend YAML frontmatter to content (--format=text only)")
 	getCmd.Flags().BoolVar(&sizeOnly, "size-only", false, "print document size only, suppress content (API calls still occur)")
 	rootCmd.AddCommand(getCmd)
 }
@@ -80,7 +80,7 @@ func formatDocText(doc *Document) string {
 
 func runGet(cmd *cobra.Command, args []string) error {
 	if frontmatter && outputFormat != "text" {
-		return fmt.Errorf("--frontmatter can only be used with text format")
+		return fmt.Errorf("--frontmatter is only supported with --format=text")
 	}
 
 	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
