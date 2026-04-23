@@ -79,6 +79,10 @@ func formatDocText(doc *Document) string {
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
+	if frontmatter && outputFormat != "text" {
+		return fmt.Errorf("--frontmatter can only be used with text format")
+	}
+
 	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
 	if err != nil {
 		return err
