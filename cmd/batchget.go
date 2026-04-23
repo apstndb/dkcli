@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -78,7 +77,7 @@ func isBisectable(err error) bool {
 	case "INVALID_ARGUMENT", "NOT_FOUND":
 		return true
 	}
-	return ae.Code == http.StatusBadRequest || ae.Code == http.StatusNotFound
+	return false
 }
 
 // fetchBatchBisect fetches documents, bisecting on bisectable errors to

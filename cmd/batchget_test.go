@@ -309,6 +309,32 @@ func TestFetchBatchBisect_AuthErrorsAreFatal(t *testing.T) {
 	}
 }
 
+func TestFetchBatchBisect_PlainHTTP404IsFatal(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "404 page not found", http.StatusNotFound)
+	}))
+
+	docs, docErrs, fatal := client.fetchBatchBisect([]string{"documents/a", "documents/b"})
+	if fatal == nil {
+		t.Fatal("expected fatal error, got nil")
+	}
+	var ae *apiError
+	if !errors.As(fatal, &ae) {
+		t.Fatalf("expected *apiError, got %T: %v", fatal, fatal)
+	}
+	if ae.Code != http.StatusNotFound {
+		t.Fatalf("fatal code = %d, want %d", ae.Code, http.StatusNotFound)
+	}
+	if docs != nil {
+		t.Fatalf("docs = %v, want nil", docs)
+	}
+	if docErrs != nil {
+		t.Fatalf("docErrs = %v, want nil", docErrs)
+	}
+}
+
 func TestWriteBatchOutdir(t *testing.T) {
 	t.Parallel()
 
