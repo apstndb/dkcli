@@ -172,8 +172,8 @@ func TestRunGet_FrontmatterRequiresTextFormat(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}
-			if err.Error() != "--frontmatter is only supported with --format=text" {
-				t.Fatalf("error = %q, want %q", err.Error(), "--frontmatter is only supported with --format=text")
+			if err.Error() != getFrontmatterTextFormatError {
+				t.Fatalf("error = %q, want %q", err.Error(), getFrontmatterTextFormatError)
 			}
 		})
 	}

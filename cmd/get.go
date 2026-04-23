@@ -14,6 +14,8 @@ var (
 	sizeOnly    bool
 )
 
+const getFrontmatterTextFormatError = "--frontmatter is only supported with --format=text"
+
 var getCmd = &cobra.Command{
 	Use:   "get <document-name>",
 	Short: "Get a document with its full Markdown content",
@@ -80,7 +82,7 @@ func formatDocText(doc *Document) string {
 
 func runGet(cmd *cobra.Command, args []string) error {
 	if frontmatter && outputFormat != "text" {
-		return fmt.Errorf("--frontmatter is only supported with --format=text")
+		return fmt.Errorf(getFrontmatterTextFormatError)
 	}
 
 	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
