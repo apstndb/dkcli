@@ -1,4 +1,6 @@
-//go:build !(aix || android || darwin || dragonfly || freebsd || illumos || ios || linux || netbsd || openbsd || solaris || windows)
+//go:build !unix && !windows
+
+// This fallback only applies when neither the standard unix nor windows build constraints match.
 
 package cmd
 

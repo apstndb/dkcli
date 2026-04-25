@@ -1,4 +1,6 @@
-//go:build aix || android || darwin || dragonfly || freebsd || illumos || ios || linux || netbsd || openbsd || solaris
+//go:build unix
+
+// The unix build constraint is a standard Go tag (Go 1.19+) for Unix-like GOOS values.
 
 package cmd
 
