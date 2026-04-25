@@ -10,6 +10,13 @@ import (
 	"testing"
 )
 
+func requireUnixLikePermissions(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not reliable on Windows")
+	}
+}
+
 func TestResolveProjectID(t *testing.T) {
 	// Not parallel: modifies global projectID and env vars.
 	orig := projectID
@@ -127,9 +134,7 @@ func TestQuotaProjectTransport(t *testing.T) {
 }
 
 func TestCreateAPIKeyOutWriter_CreatesFilesWithOwnerOnlyPermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file permission bits are not reliable on Windows")
-	}
+	requireUnixLikePermissions(t)
 
 	path := filepath.Join(t.TempDir(), "secret.txt")
 	w, closer, err := createAPIKeyOutWriter(path)
@@ -152,9 +157,7 @@ func TestCreateAPIKeyOutWriter_CreatesFilesWithOwnerOnlyPermissions(t *testing.T
 }
 
 func TestCreateAPIKeyOutWriter_RejectsExistingFilesWithBroadPermissions(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file permission bits are not reliable on Windows")
-	}
+	requireUnixLikePermissions(t)
 
 	path := filepath.Join(t.TempDir(), "secret.txt")
 	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
@@ -174,9 +177,7 @@ func TestCreateAPIKeyOutWriter_RejectsExistingFilesWithBroadPermissions(t *testi
 }
 
 func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file permission bits are not reliable on Windows")
-	}
+	requireUnixLikePermissions(t)
 
 	path := filepath.Join(t.TempDir(), "secret.txt")
 	if err := os.WriteFile(path, []byte("old"), createAPIKeyFileMode); err != nil {
@@ -205,9 +206,7 @@ func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
 }
 
 func TestCreateAPIKeyOutWriter_RejectsExistingOwnerOnlyReadOnlyFiles(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file permission bits are not reliable on Windows")
-	}
+	requireUnixLikePermissions(t)
 
 	path := filepath.Join(t.TempDir(), "secret.txt")
 	if err := os.WriteFile(path, []byte("old"), 0o400); err != nil {
