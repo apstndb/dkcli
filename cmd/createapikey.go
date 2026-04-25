@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -101,7 +102,7 @@ func resolveProjectID() string {
 	return ""
 }
 
-func newAPIKeysClient(ctx context.Context, project string) (*http.Client, error) {
+func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
 	ts, err := defaultTokenSource(ctx, cloudPlatformScope)
 	if err != nil {
 		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
@@ -110,13 +111,19 @@ func newAPIKeysClient(ctx context.Context, project string) (*http.Client, error)
 	client := oauth2.NewClient(ctx, ts)
 	client.Timeout = defaultHTTPTimeout
 
-	baseTransport := client.Transport
-	if baseTransport == nil {
-		baseTransport = http.DefaultTransport
+	quotaProject, metadata := resolveQuotaProjectID()
+	if quotaProject == "" && metadata.Type == "authorized_user" {
+		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
 	}
-	client.Transport = &quotaProjectTransport{
-		Base:    baseTransport,
-		Project: project,
+	if quotaProject != "" {
+		baseTransport := client.Transport
+		if baseTransport == nil {
+			baseTransport = http.DefaultTransport
+		}
+		client.Transport = &quotaProjectTransport{
+			Base:    baseTransport,
+			Project: quotaProject,
+		}
 	}
 	return client, nil
 }
@@ -153,8 +160,10 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
+	opCtx, cancel := context.WithTimeout(ctx, createAPIKeyOperationTimeout)
+	defer cancel()
 
-	client, err := newAPIKeysClient(ctx, project)
+	client, err := newAPIKeysClient(opCtx)
 	if err != nil {
 		return err
 	}
@@ -173,7 +182,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	createURL := fmt.Sprintf("%s/projects/%s/locations/global/keys", apiKeysBaseURL, project)
-	body, err := doAPIKeysRequest(ctx, client, http.MethodPost, createURL, reqBody, "application/json")
+	body, err := doAPIKeysRequest(opCtx, client, http.MethodPost, createURL, reqBody, "application/json")
 	if err != nil {
 		return err
 	}
@@ -183,13 +192,11 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Poll until done
-	deadline := time.Now().Add(createAPIKeyOperationTimeout)
 	for !op.Done {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("operation timed out: %s", op.Name)
-		}
-		if err := sleepContext(ctx, createAPIKeyPollInterval); err != nil {
+		if err := sleepContext(opCtx, createAPIKeyPollInterval); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("operation timed out: %s", op.Name)
+			}
 			return err
 		}
 
@@ -197,8 +204,11 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(os.Stderr, "Polling operation %s...\n", op.Name)
 		}
 		pollURL := fmt.Sprintf("%s/%s", apiKeysBaseURL, op.Name)
-		pollBody, err := doAPIKeysRequest(ctx, client, http.MethodGet, pollURL, nil, "")
+		pollBody, err := doAPIKeysRequest(opCtx, client, http.MethodGet, pollURL, nil, "")
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("operation timed out: %s", op.Name)
+			}
 			return err
 		}
 		if err := json.Unmarshal(pollBody, &op); err != nil {
@@ -230,8 +240,11 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 
 	// Get key string (separate endpoint; not included in create response).
 	ksURL := fmt.Sprintf("%s/%s/keyString", apiKeysBaseURL, keyName)
-	ksBody, err := doAPIKeysRequest(ctx, client, http.MethodGet, ksURL, nil, "")
+	ksBody, err := doAPIKeysRequest(opCtx, client, http.MethodGet, ksURL, nil, "")
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("operation timed out: %s", op.Name)
+		}
 		return err
 	}
 
