@@ -1,4 +1,4 @@
-//go:build !unix && !windows
+//go:build !(aix || android || darwin || dragonfly || freebsd || illumos || ios || linux || netbsd || openbsd || solaris || windows)
 
 package cmd
 
