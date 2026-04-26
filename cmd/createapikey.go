@@ -86,6 +86,12 @@ type keyStringResult struct {
 
 const createAPIKeyFileMode = 0o600
 
+func warnWindowsOutputACL(file string) {
+	if runtime.GOOS == "windows" {
+		fmt.Fprintf(os.Stderr, "WARNING: Windows does not enforce owner-only access via mode bits for %q; secret file access depends on the directory ACLs\n", file)
+	}
+}
+
 func resolveProjectID() string {
 	if projectID != "" {
 		return projectID
@@ -135,6 +141,7 @@ func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
 			_ = f.Close()
 			return nil, nil, err
 		}
+		warnWindowsOutputACL(file)
 		return f, f.Close, nil
 	case errors.Is(err, os.ErrNotExist):
 		f, err := os.OpenFile(file, os.O_CREATE|os.O_EXCL|os.O_WRONLY, createAPIKeyFileMode)
@@ -146,6 +153,7 @@ func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
 			_ = os.Remove(file)
 			return nil, nil, err
 		}
+		warnWindowsOutputACL(file)
 		return f, f.Close, nil
 	default:
 		if runtime.GOOS != "windows" && errors.Is(err, os.ErrPermission) {
