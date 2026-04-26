@@ -260,6 +260,107 @@ func TestFetchBatchBisect_NonBisectable(t *testing.T) {
 	}
 }
 
+func TestFetchBatchBisect_AuthErrorsAreFatal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		code   int
+		status string
+	}{
+		{name: "unauthorized", code: http.StatusUnauthorized, status: "UNAUTHENTICATED"},
+		{name: "forbidden", code: http.StatusForbidden, status: "PERMISSION_DENIED"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.code)
+				json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]any{
+						"code":    tt.code,
+						"message": "request failed",
+						"status":  tt.status,
+					},
+				})
+			}))
+
+			docs, docErrs, fatal := client.fetchBatchBisect([]string{"documents/a", "documents/b"})
+			if fatal == nil {
+				t.Fatal("expected fatal error, got nil")
+			}
+			var ae *apiError
+			if !errors.As(fatal, &ae) {
+				t.Fatalf("expected *apiError, got %T: %v", fatal, fatal)
+			}
+			if ae.Code != tt.code {
+				t.Fatalf("fatal code = %d, want %d", ae.Code, tt.code)
+			}
+			if docs != nil {
+				t.Fatalf("docs = %v, want nil", docs)
+			}
+			if docErrs != nil {
+				t.Fatalf("docErrs = %v, want nil", docErrs)
+			}
+		})
+	}
+}
+
+func TestFetchBatchBisect_PlainHTTP404IsFatal(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "404 page not found", http.StatusNotFound)
+	}))
+
+	docs, docErrs, fatal := client.fetchBatchBisect([]string{"documents/a", "documents/b"})
+	if fatal == nil {
+		t.Fatal("expected fatal error, got nil")
+	}
+	var ae *apiError
+	if !errors.As(fatal, &ae) {
+		t.Fatalf("expected *apiError, got %T: %v", fatal, fatal)
+	}
+	if ae.Code != http.StatusNotFound {
+		t.Fatalf("fatal code = %d, want %d", ae.Code, http.StatusNotFound)
+	}
+	if docs != nil {
+		t.Fatalf("docs = %v, want nil", docs)
+	}
+	if docErrs != nil {
+		t.Fatalf("docErrs = %v, want nil", docErrs)
+	}
+}
+
+func TestIsBisectable_ServerErrorsStayFatal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		code   int
+		status string
+	}{
+		{name: "missing_http_code", code: 0, status: "NOT_FOUND"},
+		{name: "non_http_client_code", code: 399, status: "INVALID_ARGUMENT"},
+		{name: "not_found_status", code: http.StatusInternalServerError, status: "NOT_FOUND"},
+		{name: "invalid_argument_status", code: http.StatusBadGateway, status: "INVALID_ARGUMENT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := &apiError{Code: tt.code, Status: tt.status}
+			if isBisectable(err) {
+				t.Fatalf("isBisectable(%+v) = true, want false", err)
+			}
+		})
+	}
+}
+
 func TestWriteBatchOutdir(t *testing.T) {
 	t.Parallel()
 
