@@ -295,13 +295,21 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "WARNING: format %q not supported for create-api-key, falling back to text\n", outputFormat)
 	}
 	if outputFormat == "text" || outputFormat == "txtar" {
-		fmt.Fprintf(w, "Name:          %s\n", keyName)
-		if dn, ok := keyResp["displayName"].(string); ok && dn != "" {
-			fmt.Fprintf(w, "Display Name:  %s\n", dn)
+		if _, err := fmt.Fprintf(w, "Name:          %s\n", keyName); err != nil {
+			return finishWrite(err)
 		}
-		fmt.Fprintf(w, "API Key:       %s\n", ks.KeyString)
+		if dn, ok := keyResp["displayName"].(string); ok && dn != "" {
+			if _, err := fmt.Fprintf(w, "Display Name:  %s\n", dn); err != nil {
+				return finishWrite(err)
+			}
+		}
+		if _, err := fmt.Fprintf(w, "API Key:       %s\n", ks.KeyString); err != nil {
+			return finishWrite(err)
+		}
 		if targets := extractAPITargets(keyResp); len(targets) > 0 {
-			fmt.Fprintf(w, "Restricted to: %s\n", strings.Join(targets, ", "))
+			if _, err := fmt.Fprintf(w, "Restricted to: %s\n", strings.Join(targets, ", ")); err != nil {
+				return finishWrite(err)
+			}
 		}
 		return finishWrite(nil)
 	}
