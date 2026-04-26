@@ -134,6 +134,8 @@ func TestQuotaProjectTransport(t *testing.T) {
 }
 
 func TestNewAPIKeysClient_UsesDefaultTimeout(t *testing.T) {
+	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-project")
+
 	orig := defaultTokenSource
 	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 		if len(scopes) != 1 || scopes[0] != cloudPlatformScope {
@@ -269,6 +271,7 @@ func TestRunCreateAPIKey_HonorsCancellationWhilePolling(t *testing.T) {
 	verbose = false
 	createAPIKeyPollInterval = time.Hour
 	createAPIKeyOperationTimeout = 2 * time.Hour
+	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-project")
 
 	origTokenSource := defaultTokenSource
 	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -356,7 +359,7 @@ func TestRunCreateAPIKey_OperationTimeoutIsHardCapped(t *testing.T) {
 	outputFile = ""
 	verbose = false
 	createAPIKeyPollInterval = 5 * time.Millisecond
-	createAPIKeyOperationTimeout = 20 * time.Millisecond
+	createAPIKeyOperationTimeout = 200 * time.Millisecond
 
 	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-project")
 
@@ -391,5 +394,63 @@ func TestRunCreateAPIKey_OperationTimeoutIsHardCapped(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "operation timed out") {
 		t.Fatalf("error = %q, want timeout", err)
+	}
+}
+
+func TestRunCreateAPIKey_CreateRequestTimeoutUsesOperationTimeoutMessage(t *testing.T) {
+	origProjectID := projectID
+	origDisplayName := displayName
+	origKeyOnly := keyOnly
+	origOutputFormat := outputFormat
+	origOutputFile := outputFile
+	origVerbose := verbose
+	origBaseURL := apiKeysBaseURL
+	origPollInterval := createAPIKeyPollInterval
+	origTimeout := createAPIKeyOperationTimeout
+	t.Cleanup(func() {
+		projectID = origProjectID
+		displayName = origDisplayName
+		keyOnly = origKeyOnly
+		outputFormat = origOutputFormat
+		outputFile = origOutputFile
+		verbose = origVerbose
+		apiKeysBaseURL = origBaseURL
+		createAPIKeyPollInterval = origPollInterval
+		createAPIKeyOperationTimeout = origTimeout
+	})
+
+	projectID = "test-project"
+	displayName = "dkcli"
+	keyOnly = false
+	outputFormat = "text"
+	outputFile = ""
+	verbose = false
+	createAPIKeyOperationTimeout = 200 * time.Millisecond
+	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-project")
+
+	origTokenSource := defaultTokenSource
+	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
+		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
+	}
+	t.Cleanup(func() { defaultTokenSource = origTokenSource })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v2/projects/test-project/locations/global/keys" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		time.Sleep(time.Second)
+	}))
+	t.Cleanup(srv.Close)
+	apiKeysBaseURL = srv.URL + "/v2"
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+
+	err := runCreateAPIKey(cmd, nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != "operation timed out" {
+		t.Fatalf("error = %q, want %q", err.Error(), "operation timed out")
 	}
 }

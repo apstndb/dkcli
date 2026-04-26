@@ -89,6 +89,13 @@ type keyStringResult struct {
 	KeyString string `json:"keyString"`
 }
 
+func apiKeyOperationTimeoutError(opName string) error {
+	if opName == "" {
+		return fmt.Errorf("operation timed out")
+	}
+	return fmt.Errorf("operation timed out: %s", opName)
+}
+
 func resolveProjectID() string {
 	if projectID != "" {
 		return projectID
@@ -184,6 +191,9 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	createURL := fmt.Sprintf("%s/projects/%s/locations/global/keys", apiKeysBaseURL, project)
 	body, err := doAPIKeysRequest(opCtx, client, http.MethodPost, createURL, reqBody, "application/json")
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return apiKeyOperationTimeoutError("")
+		}
 		return err
 	}
 
@@ -195,7 +205,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	for !op.Done {
 		if err := sleepContext(opCtx, createAPIKeyPollInterval); err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("operation timed out: %s", op.Name)
+				return apiKeyOperationTimeoutError(op.Name)
 			}
 			return err
 		}
@@ -207,7 +217,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		pollBody, err := doAPIKeysRequest(opCtx, client, http.MethodGet, pollURL, nil, "")
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				return fmt.Errorf("operation timed out: %s", op.Name)
+				return apiKeyOperationTimeoutError(op.Name)
 			}
 			return err
 		}
@@ -243,7 +253,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	ksBody, err := doAPIKeysRequest(opCtx, client, http.MethodGet, ksURL, nil, "")
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("operation timed out: %s", op.Name)
+			return apiKeyOperationTimeoutError(op.Name)
 		}
 		return err
 	}
