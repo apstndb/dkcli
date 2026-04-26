@@ -343,6 +343,8 @@ func TestIsBisectable_ServerErrorsStayFatal(t *testing.T) {
 		code   int
 		status string
 	}{
+		{name: "missing_http_code", code: 0, status: "NOT_FOUND"},
+		{name: "non_http_client_code", code: 399, status: "INVALID_ARGUMENT"},
 		{name: "not_found_status", code: http.StatusInternalServerError, status: "NOT_FOUND"},
 		{name: "invalid_argument_status", code: http.StatusBadGateway, status: "INVALID_ARGUMENT"},
 	}

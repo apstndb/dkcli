@@ -73,7 +73,7 @@ func isBisectable(err error) bool {
 	if !errors.As(err, &ae) {
 		return false
 	}
-	if ae.Code >= 500 {
+	if ae.Code < 400 || ae.Code >= 500 {
 		return false
 	}
 	switch ae.Status {
