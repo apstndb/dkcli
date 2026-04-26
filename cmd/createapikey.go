@@ -116,7 +116,6 @@ func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
 	}
 
 	client := oauth2.NewClient(ctx, ts)
-	client.Timeout = defaultHTTPTimeout
 
 	quotaProject, metadata := resolveQuotaProjectID()
 	if quotaProject == "" && metadata.Type == "authorized_user" {
@@ -151,10 +150,6 @@ func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url stri
 
 	resp, err := client.Do(req)
 	if err != nil {
-		if resp != nil && resp.Body != nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-		}
 		return nil, err
 	}
 	return checkResponse(resp)

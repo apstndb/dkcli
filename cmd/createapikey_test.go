@@ -133,7 +133,7 @@ func TestQuotaProjectTransport(t *testing.T) {
 	}
 }
 
-func TestNewAPIKeysClient_UsesDefaultTimeout(t *testing.T) {
+func TestNewAPIKeysClient_LeavesClientTimeoutUnset(t *testing.T) {
 	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-project")
 
 	orig := defaultTokenSource
@@ -149,8 +149,8 @@ func TestNewAPIKeysClient_UsesDefaultTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if client.Timeout != defaultHTTPTimeout {
-		t.Fatalf("timeout = %v, want %v", client.Timeout, defaultHTTPTimeout)
+	if client.Timeout != 0 {
+		t.Fatalf("timeout = %v, want 0", client.Timeout)
 	}
 }
 
