@@ -99,9 +99,9 @@ func resolveProjectID() string {
 	return ""
 }
 
-func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
+func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
 	if file == "" {
-		return os.Stdout, func() {}, nil
+		return os.Stdout, func() error { return nil }, nil
 	}
 
 	f, err := openExistingCreateAPIKeyFile(file)
@@ -135,7 +135,7 @@ func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
 			_ = f.Close()
 			return nil, nil, err
 		}
-		return f, func() { f.Close() }, nil
+		return f, f.Close, nil
 	case errors.Is(err, os.ErrNotExist):
 		f, err := os.OpenFile(file, os.O_CREATE|os.O_EXCL|os.O_WRONLY, createAPIKeyFileMode)
 		if err != nil {
@@ -145,7 +145,7 @@ func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
 			_ = f.Close()
 			return nil, nil, err
 		}
-		return f, func() { f.Close() }, nil
+		return f, f.Close, nil
 	default:
 		if runtime.GOOS != "windows" && errors.Is(err, os.ErrPermission) {
 			info, statErr := os.Lstat(file)
@@ -275,11 +275,20 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closer()
+	finishWrite := func(writeErr error) error {
+		closeErr := closer()
+		if writeErr != nil {
+			if closeErr != nil {
+				return errors.Join(writeErr, closeErr)
+			}
+			return writeErr
+		}
+		return closeErr
+	}
 
 	if keyOnly {
 		_, err := fmt.Fprintln(w, ks.KeyString)
-		return err
+		return finishWrite(err)
 	}
 
 	if outputFormat == "txtar" {
@@ -294,9 +303,9 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		if targets := extractAPITargets(keyResp); len(targets) > 0 {
 			fmt.Fprintf(w, "Restricted to: %s\n", strings.Join(targets, ", "))
 		}
-		return nil
+		return finishWrite(nil)
 	}
-	return writeFormatted(w, outputFormat, keyResp)
+	return finishWrite(writeFormatted(w, outputFormat, keyResp))
 }
 
 // extractAPITargets returns the service names from the restrictions.apiTargets

@@ -141,7 +141,11 @@ func TestCreateAPIKeyOutWriter_CreatesFilesWithOwnerOnlyPermissions(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closer()
+	defer func() {
+		if err := closer(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if _, err := w.Write([]byte("secret")); err != nil {
 		t.Fatal(err)
@@ -191,7 +195,11 @@ func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer closer()
+	defer func() {
+		if err := closer(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	if _, err := w.Write([]byte("new")); err != nil {
 		t.Fatal(err)
 	}
