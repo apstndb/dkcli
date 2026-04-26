@@ -86,6 +86,10 @@ type keyStringResult struct {
 
 const createAPIKeyFileMode = 0o600
 
+func ownerOnlyPermissionExample() string {
+	return fmt.Sprintf("%04o", createAPIKeyFileMode)
+}
+
 func warnWindowsOutputACL(file string) {
 	if runtime.GOOS == "windows" {
 		fmt.Fprintf(os.Stderr, "WARNING: Windows does not enforce owner-only access via mode bits for %q; secret file access depends on the directory ACLs\n", file)
@@ -126,11 +130,11 @@ func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
 			perms := info.Mode().Perm()
 			if perms&0o077 != 0 {
 				_ = f.Close()
-				return nil, nil, fmt.Errorf("refusing to write secret to %q with permissions %04o; use owner-only permissions with owner write (for example 0600)", file, perms)
+				return nil, nil, fmt.Errorf("refusing to write secret to %q with permissions %04o; use owner-only permissions with owner write (for example %s)", file, perms, ownerOnlyPermissionExample())
 			}
 			if perms&0o200 == 0 {
 				_ = f.Close()
-				return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example 0600)", file)
+				return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example %s)", file, ownerOnlyPermissionExample())
 			}
 		}
 		if err := f.Truncate(0); err != nil {
@@ -160,8 +164,11 @@ func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
 			info, statErr := os.Lstat(file)
 			if statErr == nil && info.Mode().IsRegular() {
 				perms := info.Mode().Perm()
-				if perms&0o077 == 0 && perms&0o200 == 0 {
-					return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example 0600)", file)
+				if perms&0o077 != 0 {
+					return nil, nil, fmt.Errorf("refusing to write secret to %q with permissions %04o; use owner-only permissions with owner write (for example %s)", file, perms, ownerOnlyPermissionExample())
+				}
+				if perms&0o200 == 0 {
+					return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example %s)", file, ownerOnlyPermissionExample())
 				}
 			}
 		}
