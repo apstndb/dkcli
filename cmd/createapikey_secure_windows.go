@@ -12,7 +12,8 @@ func openExistingCreateAPIKeyFile(file string) (*os.File, error) {
 	// symlink rejection before opening the existing file for reuse. That means
 	// there is still an unavoidable TOCTOU gap between Lstat and OpenFile on
 	// this platform; createAPIKeyOutWriter compensates by validating the opened
-	// descriptor's type and permissions immediately after open.
+	// descriptor's type and Windows-applicable reuse checks immediately after
+	// open.
 	info, err := os.Lstat(file)
 	if err != nil {
 		return nil, err

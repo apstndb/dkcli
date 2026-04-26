@@ -149,7 +149,7 @@ func createAPIKeyOutWriter(file string) (io.Writer, func(), error) {
 	default:
 		if runtime.GOOS != "windows" && errors.Is(err, os.ErrPermission) {
 			info, statErr := os.Lstat(file)
-			if statErr == nil && info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular() {
+			if statErr == nil && info.Mode().IsRegular() {
 				perms := info.Mode().Perm()
 				if perms&0o077 == 0 && perms&0o200 == 0 {
 					return nil, nil, fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example 0600)", file)
