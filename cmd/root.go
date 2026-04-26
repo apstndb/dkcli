@@ -154,7 +154,6 @@ func newADCHTTPClient(ctx context.Context, mode authMode, timeout time.Duration)
 func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	client := &apiClient{
 		baseURL: searchBaseURL,
-		client:  &http.Client{Timeout: defaultHTTPTimeout},
 		ctx:     ctx,
 		limiter: apiLimiter,
 		verbose: verbose,
@@ -163,6 +162,7 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	if mode == authPreferAPIKey {
 		if apiKey := apiKeyFromEnv(); apiKey != "" {
 			client.apiKey = apiKey
+			client.client = &http.Client{Timeout: defaultHTTPTimeout}
 			return client, nil
 		}
 	}
