@@ -215,5 +215,5 @@ Note: `get` and `batch-get` use the GA `v1` document endpoints. `answer-query` s
 | `--max-pages N` | Max pages with `-a` (default 5) |
 | `--filter <expr>` | Filter search results by document metadata |
 | `--outdir <dir>` | Write each doc to separate files (batch-get) |
-| `--frontmatter` | Prepend YAML frontmatter to text output (get, batch-get) |
+| `--frontmatter` | Prepend YAML frontmatter to text output (get, batch-get; `get` does not support it with `--size-only`) |
 | `--key-only` | Print only the API key string (create-api-key) |

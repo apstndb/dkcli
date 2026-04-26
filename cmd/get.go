@@ -15,6 +15,7 @@ var (
 )
 
 const getFrontmatterTextFormatError = "--frontmatter is only supported with --format=text"
+const getFrontmatterSizeOnlyError = "--frontmatter is not supported with --size-only"
 
 var getCmd = &cobra.Command{
 	Use:   "get <document-name>",
@@ -30,7 +31,7 @@ The document name can be specified as:
 }
 
 func init() {
-	getCmd.Flags().BoolVar(&frontmatter, "frontmatter", false, "prepend YAML frontmatter to content (--format=text only)")
+	getCmd.Flags().BoolVar(&frontmatter, "frontmatter", false, "prepend YAML frontmatter to content (--format=text only; incompatible with --size-only)")
 	getCmd.Flags().BoolVar(&sizeOnly, "size-only", false, "print document size only, suppress content (API calls still occur)")
 	rootCmd.AddCommand(getCmd)
 }
@@ -81,6 +82,9 @@ func formatDocText(doc *Document) string {
 }
 
 func runGet(cmd *cobra.Command, args []string) error {
+	if frontmatter && sizeOnly {
+		return fmt.Errorf(getFrontmatterSizeOnlyError)
+	}
 	if frontmatter && outputFormat != "text" {
 		return fmt.Errorf(getFrontmatterTextFormatError)
 	}
