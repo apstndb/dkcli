@@ -335,6 +335,30 @@ func TestFetchBatchBisect_PlainHTTP404IsFatal(t *testing.T) {
 	}
 }
 
+func TestIsBisectable_ServerErrorsStayFatal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		code   int
+		status string
+	}{
+		{name: "not_found_status", code: http.StatusInternalServerError, status: "NOT_FOUND"},
+		{name: "invalid_argument_status", code: http.StatusBadGateway, status: "INVALID_ARGUMENT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := &apiError{Code: tt.code, Status: tt.status}
+			if isBisectable(err) {
+				t.Fatalf("isBisectable(%+v) = true, want false", err)
+			}
+		})
+	}
+}
+
 func TestWriteBatchOutdir(t *testing.T) {
 	t.Parallel()
 

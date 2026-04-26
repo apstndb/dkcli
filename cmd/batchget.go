@@ -73,6 +73,9 @@ func isBisectable(err error) bool {
 	if !errors.As(err, &ae) {
 		return false
 	}
+	if ae.Code >= 500 {
+		return false
+	}
 	switch ae.Status {
 	case "INVALID_ARGUMENT", "NOT_FOUND":
 		return true
