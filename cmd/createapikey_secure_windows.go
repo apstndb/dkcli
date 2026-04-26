@@ -9,7 +9,10 @@ import (
 
 func openExistingCreateAPIKeyFile(file string) (*os.File, error) {
 	// Go does not expose a no-follow open on Windows, so this is a best-effort
-	// symlink rejection before opening the existing file for reuse.
+	// symlink rejection before opening the existing file for reuse. That means
+	// there is still an unavoidable TOCTOU gap between Lstat and OpenFile on
+	// this platform; createAPIKeyOutWriter compensates by validating the opened
+	// descriptor's type and permissions immediately after open.
 	info, err := os.Lstat(file)
 	if err != nil {
 		return nil, err
