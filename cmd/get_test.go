@@ -156,13 +156,16 @@ func TestRunGet_FrontmatterRequiresTextFormat(t *testing.T) {
 	for _, format := range tests {
 		t.Run(format, func(t *testing.T) {
 			origFrontmatter := frontmatter
+			origSizeOnly := sizeOnly
 			origOutputFormat := outputFormat
 			t.Cleanup(func() {
 				frontmatter = origFrontmatter
+				sizeOnly = origSizeOnly
 				outputFormat = origOutputFormat
 			})
 
 			frontmatter = true
+			sizeOnly = false
 			outputFormat = format
 
 			cmd := &cobra.Command{}
