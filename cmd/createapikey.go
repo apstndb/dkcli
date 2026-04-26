@@ -143,6 +143,7 @@ func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
 		}
 		if err := f.Chmod(createAPIKeyFileMode); err != nil {
 			_ = f.Close()
+			_ = os.Remove(file)
 			return nil, nil, err
 		}
 		return f, f.Close, nil

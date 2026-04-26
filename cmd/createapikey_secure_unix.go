@@ -1,7 +1,6 @@
 //go:build unix
 
-// The unix build constraint name was introduced in Go 1.19, but this repository
-// itself targets the toolchain declared in go.mod.
+// The unix build constraint selects Unix-like GOOS values in supported toolchains.
 
 package cmd
 
