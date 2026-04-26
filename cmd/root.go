@@ -43,7 +43,10 @@ const defaultHTTPTimeout = time.Minute
 
 type authMode int
 
-const authPreferAPIKey authMode = iota
+const (
+	authPreferAPIKey authMode = iota
+	authRequireADC
+)
 
 var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 	return google.DefaultTokenSource(ctx, scopes...)
@@ -116,6 +119,37 @@ func apiKeyFromEnv() string {
 	return ""
 }
 
+func newADCHTTPClient(ctx context.Context, mode authMode, timeout time.Duration) (*http.Client, error) {
+	tokenSource, err := defaultTokenSource(ctx, cloudPlatformScope)
+	if err != nil {
+		if mode == authPreferAPIKey {
+			return nil, fmt.Errorf("set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY, or configure ADC with 'gcloud auth application-default login': %w", err)
+		}
+		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
+	}
+
+	client := oauth2.NewClient(ctx, tokenSource)
+	if timeout > 0 {
+		client.Timeout = timeout
+	}
+
+	quotaProject, metadata := resolveQuotaProjectID()
+	if quotaProject == "" && metadata.Type == "authorized_user" {
+		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
+	}
+	if quotaProject != "" {
+		baseTransport := client.Transport
+		if baseTransport == nil {
+			baseTransport = http.DefaultTransport
+		}
+		client.Transport = &quotaProjectTransport{
+			Base:    baseTransport,
+			Project: quotaProject,
+		}
+	}
+	return client, nil
+}
+
 // newAPIClient creates an apiClient using the global defaults.
 func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 	client := &apiClient{
@@ -133,29 +167,10 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 		}
 	}
 
-	tokenSource, err := defaultTokenSource(ctx, cloudPlatformScope)
+	var err error
+	client.client, err = newADCHTTPClient(ctx, mode, defaultHTTPTimeout)
 	if err != nil {
-		if mode == authPreferAPIKey {
-			return nil, fmt.Errorf("set DEVELOPERKNOWLEDGE_API_KEY or GOOGLE_API_KEY, or configure ADC with 'gcloud auth application-default login': %w", err)
-		}
-		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
-	}
-
-	client.client = oauth2.NewClient(ctx, tokenSource)
-	client.client.Timeout = defaultHTTPTimeout
-	quotaProject, metadata := resolveQuotaProjectID()
-	if quotaProject == "" && metadata.Type == "authorized_user" {
-		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
-	}
-	if quotaProject != "" {
-		baseTransport := client.client.Transport
-		if baseTransport == nil {
-			baseTransport = http.DefaultTransport
-		}
-		client.client.Transport = &quotaProjectTransport{
-			Base:    baseTransport,
-			Project: quotaProject,
-		}
+		return nil, err
 	}
 	return client, nil
 }

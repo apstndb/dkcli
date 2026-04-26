@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/oauth2"
 )
 
 var (
@@ -110,35 +109,14 @@ func resolveProjectID() string {
 }
 
 func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
-	ts, err := defaultTokenSource(ctx, cloudPlatformScope)
-	if err != nil {
-		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
-	}
-
 	// runCreateAPIKey already wraps the whole API Keys LRO in a dedicated
 	// operation context, so this client intentionally leaves Timeout unset to
 	// avoid a second competing timeout source and keep timeout errors
 	// consistent.
-	client := oauth2.NewClient(ctx, ts)
-
-	quotaProject, metadata := resolveQuotaProjectID()
 	// Charge quota/billing to the configured ADC quota project, matching the
 	// rest of the CLI, rather than implicitly using the target project passed
 	// to --project.
-	if quotaProject == "" && metadata.Type == "authorized_user" {
-		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
-	}
-	if quotaProject != "" {
-		baseTransport := client.Transport
-		if baseTransport == nil {
-			baseTransport = http.DefaultTransport
-		}
-		client.Transport = &quotaProjectTransport{
-			Base:    baseTransport,
-			Project: quotaProject,
-		}
-	}
-	return client, nil
+	return newADCHTTPClient(ctx, authRequireADC, 0)
 }
 
 func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url string, body []byte, contentType string) ([]byte, error) {
@@ -161,7 +139,6 @@ func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url stri
 	resp, err := client.Do(req)
 	if err != nil {
 		if resp != nil && resp.Body != nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 		}
 		return nil, err
