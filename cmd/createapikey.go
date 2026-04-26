@@ -138,12 +138,6 @@ func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url stri
 
 	resp, err := client.Do(req)
 	if err != nil {
-		if resp != nil && resp.Body != nil {
-			// Mirror apiClient.doAPIRequest: some net/http error paths still hand
-			// back a response body that should be drained and closed before exit.
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
-		}
 		return nil, err
 	}
 	return checkResponse(resp)
