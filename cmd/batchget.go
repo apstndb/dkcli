@@ -60,14 +60,27 @@ func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
 	return resp.Documents, nil
 }
 
-// isBisectable reports whether the error is a client error (4xx) that
-// can be narrowed down by bisecting the request into smaller batches.
-// Network errors, 5xx, and rate-limit exhaustion are not bisectable.
-// Note: 429 is 4xx but is returned as *rateLimitError by checkResponse,
-// not *apiError, so it won't match here.
+// isBisectable reports whether the error is document-specific enough to
+// narrow down by bisecting the request into smaller batches.
+// Network errors, auth/permission failures, 5xx, and rate-limit exhaustion
+// are not bisectable.
+// Note: 429 is returned as *rateLimitError by checkResponse, not *apiError.
+// Keep this as a conservative allow-list: unknown 4xx responses stay fatal so
+// batch-level request/configuration errors are not rewritten into per-document
+// failures.
 func isBisectable(err error) bool {
 	var ae *apiError
-	return errors.As(err, &ae) && ae.Code >= 400 && ae.Code < 500
+	if !errors.As(err, &ae) {
+		return false
+	}
+	if ae.Code < 400 || ae.Code >= 500 {
+		return false
+	}
+	switch ae.Status {
+	case "INVALID_ARGUMENT", "NOT_FOUND":
+		return true
+	}
+	return false
 }
 
 // fetchBatchBisect fetches documents, bisecting on bisectable errors to
