@@ -115,9 +115,16 @@ func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
 		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
 	}
 
+	// runCreateAPIKey already wraps the whole API Keys LRO in a dedicated
+	// operation context, so this client intentionally leaves Timeout unset to
+	// avoid a second competing timeout source and keep timeout errors
+	// consistent.
 	client := oauth2.NewClient(ctx, ts)
 
 	quotaProject, metadata := resolveQuotaProjectID()
+	// Charge quota/billing to the configured ADC quota project, matching the
+	// rest of the CLI, rather than implicitly using the target project passed
+	// to --project.
 	if quotaProject == "" && metadata.Type == "authorized_user" {
 		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
 	}
@@ -135,6 +142,9 @@ func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
 }
 
 func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url string, body []byte, contentType string) ([]byte, error) {
+	// create-api-key talks to the API Keys API via a short, bounded sequence of
+	// OAuth-authenticated requests, so it uses a dedicated helper instead of
+	// the Developer Knowledge-specific apiClient rate-limit/retry path.
 	var requestBody io.Reader
 	if body != nil {
 		requestBody = bytes.NewReader(body)
@@ -150,6 +160,10 @@ func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url stri
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if resp != nil && resp.Body != nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			_ = resp.Body.Close()
+		}
 		return nil, err
 	}
 	return checkResponse(resp)
