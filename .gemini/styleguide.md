@@ -6,10 +6,11 @@ platform constraint clearly.
 
 ## Toolchain and modern Go
 
-- Treat `go.mod` and the declared toolchain as the source of truth for available Go
-  language features and standard-library APIs.
+- Treat `go.mod` as the source of truth for available Go language features and
+  standard-library APIs, using the `go` directive and the `toolchain`
+  directive if present.
 - This repository targets modern Go. Prefer current Go idioms and APIs that are
-  available in the repo toolchain.
+  available for the Go version declared by the repository.
 - Do not infer the repository's minimum supported Go version from build tags,
   comments, or compatibility notes.
 - Do not suggest backports or older-Go compatibility workarounds unless the change
