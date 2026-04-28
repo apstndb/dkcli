@@ -43,7 +43,10 @@ const defaultHTTPTimeout = time.Minute
 
 type authMode int
 
-const authPreferAPIKey authMode = iota
+const (
+	authPreferAPIKey authMode = iota
+	authRequireADC
+)
 
 var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
 	return google.DefaultTokenSource(ctx, scopes...)
@@ -116,23 +119,7 @@ func apiKeyFromEnv() string {
 	return ""
 }
 
-// newAPIClient creates an apiClient using the global defaults.
-func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
-	client := &apiClient{
-		baseURL: searchBaseURL,
-		client:  &http.Client{Timeout: defaultHTTPTimeout},
-		ctx:     ctx,
-		limiter: apiLimiter,
-		verbose: verbose,
-	}
-
-	if mode == authPreferAPIKey {
-		if apiKey := apiKeyFromEnv(); apiKey != "" {
-			client.apiKey = apiKey
-			return client, nil
-		}
-	}
-
+func newADCHTTPClient(ctx context.Context, mode authMode, timeout time.Duration) (*http.Client, error) {
 	tokenSource, err := defaultTokenSource(ctx, cloudPlatformScope)
 	if err != nil {
 		if mode == authPreferAPIKey {
@@ -141,21 +128,49 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 		return nil, fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
 	}
 
-	client.client = oauth2.NewClient(ctx, tokenSource)
-	client.client.Timeout = defaultHTTPTimeout
+	client := oauth2.NewClient(ctx, tokenSource)
+	if timeout > 0 {
+		client.Timeout = timeout
+	}
+
 	quotaProject, metadata := resolveQuotaProjectID()
 	if quotaProject == "" && metadata.Type == "authorized_user" {
 		return nil, fmt.Errorf("ADC requires a quota project; run 'gcloud auth application-default set-quota-project <project-id>' or set GOOGLE_CLOUD_QUOTA_PROJECT")
 	}
 	if quotaProject != "" {
-		baseTransport := client.client.Transport
+		baseTransport := client.Transport
 		if baseTransport == nil {
 			baseTransport = http.DefaultTransport
 		}
-		client.client.Transport = &quotaProjectTransport{
+		client.Transport = &quotaProjectTransport{
 			Base:    baseTransport,
 			Project: quotaProject,
 		}
+	}
+	return client, nil
+}
+
+// newAPIClient creates an apiClient using the global defaults.
+func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
+	client := &apiClient{
+		baseURL: searchBaseURL,
+		ctx:     ctx,
+		limiter: apiLimiter,
+		verbose: verbose,
+	}
+
+	if mode == authPreferAPIKey {
+		if apiKey := apiKeyFromEnv(); apiKey != "" {
+			client.apiKey = apiKey
+			client.client = &http.Client{Timeout: defaultHTTPTimeout}
+			return client, nil
+		}
+	}
+
+	var err error
+	client.client, err = newADCHTTPClient(ctx, mode, defaultHTTPTimeout)
+	if err != nil {
+		return nil, err
 	}
 	return client, nil
 }

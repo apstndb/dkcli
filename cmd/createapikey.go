@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,14 +14,18 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 )
 
 var (
 	projectID   string
 	displayName string
 	keyOnly     bool
+)
+
+var (
+	apiKeysBaseURL               = "https://apikeys.googleapis.com/v2"
+	createAPIKeyPollInterval     = 2 * time.Second
+	createAPIKeyOperationTimeout = defaultHTTPTimeout
 )
 
 var createAPIKeyCmd = &cobra.Command{
@@ -94,6 +99,13 @@ func warnWindowsOutputACL(file string) {
 	if runtime.GOOS == "windows" {
 		fmt.Fprintf(os.Stderr, "WARNING: Windows does not enforce owner-only access via mode bits for %q; secret file access depends on the directory ACLs\n", file)
 	}
+}
+
+func apiKeyOperationTimeoutError(opName string) error {
+	if opName == "" {
+		return fmt.Errorf("operation timed out")
+	}
+	return fmt.Errorf("operation timed out: %s", opName)
 }
 
 func resolveProjectID() string {
@@ -176,6 +188,41 @@ func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
 	}
 }
 
+func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
+	// runCreateAPIKey already wraps the whole API Keys LRO in a dedicated
+	// operation context, so this client intentionally leaves Timeout unset to
+	// avoid a second competing timeout source and keep timeout errors
+	// consistent.
+	// Charge quota/billing to the configured ADC quota project, matching the
+	// rest of the CLI, rather than implicitly using the target project passed
+	// to --project.
+	return newADCHTTPClient(ctx, authRequireADC, 0)
+}
+
+func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url string, body []byte, contentType string) ([]byte, error) {
+	// create-api-key talks to the API Keys API via a short, bounded sequence of
+	// OAuth-authenticated requests, so it uses a dedicated helper instead of
+	// the Developer Knowledge-specific apiClient rate-limit/retry path.
+	var requestBody io.Reader
+	if body != nil {
+		requestBody = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, requestBody)
+	if err != nil {
+		return nil, err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return checkResponse(resp)
+}
+
 func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	project := resolveProjectID()
 	if project == "" {
@@ -183,16 +230,12 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
+	opCtx, cancel := context.WithTimeout(ctx, createAPIKeyOperationTimeout)
+	defer cancel()
 
-	ts, err := google.DefaultTokenSource(ctx, "https://www.googleapis.com/auth/cloud-platform")
+	client, err := newAPIKeysClient(opCtx)
 	if err != nil {
-		return fmt.Errorf("get credentials: %w (run 'gcloud auth application-default login')", err)
-	}
-	client := &http.Client{
-		Transport: &quotaProjectTransport{
-			Base:    &oauth2.Transport{Source: ts},
-			Project: project,
-		},
+		return err
 	}
 
 	// Create the API key
@@ -208,13 +251,12 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	createURL := fmt.Sprintf("https://apikeys.googleapis.com/v2/projects/%s/locations/global/keys", project)
-	resp, err := client.Post(createURL, "application/json", bytes.NewReader(reqBody))
+	createURL := fmt.Sprintf("%s/projects/%s/locations/global/keys", apiKeysBaseURL, project)
+	body, err := doAPIKeysRequest(opCtx, client, http.MethodPost, createURL, reqBody, "application/json")
 	if err != nil {
-		return err
-	}
-	body, err := checkResponse(resp)
-	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return apiKeyOperationTimeoutError("")
+		}
 		return err
 	}
 
@@ -223,23 +265,23 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Poll until done
-	deadline := time.Now().Add(60 * time.Second)
 	for !op.Done {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("operation timed out: %s", op.Name)
+		if err := sleepContext(opCtx, createAPIKeyPollInterval); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return apiKeyOperationTimeoutError(op.Name)
+			}
+			return err
 		}
-		time.Sleep(2 * time.Second)
 
 		if verbose {
 			fmt.Fprintf(os.Stderr, "Polling operation %s...\n", op.Name)
 		}
-		pollResp, err := client.Get("https://apikeys.googleapis.com/v2/" + op.Name)
+		pollURL := fmt.Sprintf("%s/%s", apiKeysBaseURL, op.Name)
+		pollBody, err := doAPIKeysRequest(opCtx, client, http.MethodGet, pollURL, nil, "")
 		if err != nil {
-			return err
-		}
-		pollBody, err := checkResponse(pollResp)
-		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return apiKeyOperationTimeoutError(op.Name)
+			}
 			return err
 		}
 		if err := json.Unmarshal(pollBody, &op); err != nil {
@@ -270,12 +312,12 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get key string (separate endpoint; not included in create response).
-	ksResp, err := client.Get(fmt.Sprintf("https://apikeys.googleapis.com/v2/%s/keyString", keyName))
+	ksURL := fmt.Sprintf("%s/%s/keyString", apiKeysBaseURL, keyName)
+	ksBody, err := doAPIKeysRequest(opCtx, client, http.MethodGet, ksURL, nil, "")
 	if err != nil {
-		return err
-	}
-	ksBody, err := checkResponse(ksResp)
-	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return apiKeyOperationTimeoutError(op.Name)
+		}
 		return err
 	}
 

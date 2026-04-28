@@ -108,7 +108,7 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 
 | Flag | Description |
 |------|-------------|
-| `--frontmatter` | Prepend YAML frontmatter to content |
+| `--frontmatter` | Prepend YAML frontmatter to content (`--format=text` only; incompatible with `--size-only`) |
 
 ### `batch-get`
 
