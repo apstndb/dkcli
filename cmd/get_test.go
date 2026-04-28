@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestNormalizeDocName(t *testing.T) {
@@ -144,5 +147,63 @@ func TestFetchGet(t *testing.T) {
 	}
 	if got.Content != doc.Content {
 		t.Errorf("content = %q, want %q", got.Content, doc.Content)
+	}
+}
+
+func TestRunGet_FrontmatterRequiresTextFormat(t *testing.T) {
+	tests := []string{"json", "jsonl", "yaml", "txtar"}
+
+	for _, format := range tests {
+		t.Run(format, func(t *testing.T) {
+			origFrontmatter := frontmatter
+			origSizeOnly := sizeOnly
+			origOutputFormat := outputFormat
+			t.Cleanup(func() {
+				frontmatter = origFrontmatter
+				sizeOnly = origSizeOnly
+				outputFormat = origOutputFormat
+			})
+
+			frontmatter = true
+			sizeOnly = false
+			outputFormat = format
+
+			cmd := &cobra.Command{}
+			cmd.SetContext(context.Background())
+
+			err := runGet(cmd, []string{"documents/example.com/page"})
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if err.Error() != getFrontmatterTextFormatError {
+				t.Fatalf("error = %q, want %q", err.Error(), getFrontmatterTextFormatError)
+			}
+		})
+	}
+}
+
+func TestRunGet_FrontmatterRejectsSizeOnly(t *testing.T) {
+	origFrontmatter := frontmatter
+	origSizeOnly := sizeOnly
+	origOutputFormat := outputFormat
+	t.Cleanup(func() {
+		frontmatter = origFrontmatter
+		sizeOnly = origSizeOnly
+		outputFormat = origOutputFormat
+	})
+
+	frontmatter = true
+	sizeOnly = true
+	outputFormat = "text"
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+
+	err := runGet(cmd, []string{"documents/example.com/page"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != getFrontmatterSizeOnlyError {
+		t.Fatalf("error = %q, want %q", err.Error(), getFrontmatterSizeOnlyError)
 	}
 }
