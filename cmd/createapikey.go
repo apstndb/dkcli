@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -88,6 +89,28 @@ type keyStringResult struct {
 	KeyString string `json:"keyString"`
 }
 
+const createAPIKeyFileMode = 0o600
+
+func ownerOnlyPermissionExample() string {
+	return fmt.Sprintf("%04o", createAPIKeyFileMode)
+}
+
+func validateOwnerOnlyPermissions(file string, perms os.FileMode) error {
+	if perms&0o077 != 0 {
+		return fmt.Errorf("refusing to write secret to %q with permissions %04o; use owner-only permissions with owner write (for example %s)", file, perms, ownerOnlyPermissionExample())
+	}
+	if perms&0o200 == 0 {
+		return fmt.Errorf("refusing to write secret to %q without owner write permission; use owner-only permissions with owner write (for example %s)", file, ownerOnlyPermissionExample())
+	}
+	return nil
+}
+
+func warnWindowsOutputACL(file string) {
+	if runtime.GOOS == "windows" {
+		fmt.Fprintf(os.Stderr, "WARNING: Windows does not enforce owner-only access via mode bits for %q; secret file access depends on the directory ACLs\n", file)
+	}
+}
+
 func apiKeyOperationTimeoutError(opName string) error {
 	if opName == "" {
 		return fmt.Errorf("operation timed out")
@@ -106,6 +129,64 @@ func resolveProjectID() string {
 		return p
 	}
 	return ""
+}
+
+func createAPIKeyOutWriter(file string) (io.Writer, func() error, error) {
+	if file == "" {
+		return os.Stdout, func() error { return nil }, nil
+	}
+
+	f, err := openExistingCreateAPIKeyFile(file)
+	switch {
+	case err == nil:
+		info, err := f.Stat()
+		if err != nil {
+			_ = f.Close()
+			return nil, nil, err
+		}
+		if !info.Mode().IsRegular() {
+			_ = f.Close()
+			return nil, nil, fmt.Errorf("refusing to write secret to non-regular file %q", file)
+		}
+		if runtime.GOOS != "windows" {
+			if err := validateOwnerOnlyPermissions(file, info.Mode().Perm()); err != nil {
+				_ = f.Close()
+				return nil, nil, err
+			}
+		}
+		if err := f.Truncate(0); err != nil {
+			_ = f.Close()
+			return nil, nil, err
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			_ = f.Close()
+			return nil, nil, err
+		}
+		warnWindowsOutputACL(file)
+		return f, f.Close, nil
+	case errors.Is(err, os.ErrNotExist):
+		f, err := os.OpenFile(file, os.O_CREATE|os.O_EXCL|os.O_WRONLY, createAPIKeyFileMode)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := f.Chmod(createAPIKeyFileMode); err != nil {
+			_ = f.Close()
+			_ = os.Remove(file)
+			return nil, nil, err
+		}
+		warnWindowsOutputACL(file)
+		return f, f.Close, nil
+	default:
+		if runtime.GOOS != "windows" && errors.Is(err, os.ErrPermission) {
+			info, statErr := os.Lstat(file)
+			if statErr == nil && info.Mode().IsRegular() {
+				if err := validateOwnerOnlyPermissions(file, info.Mode().Perm()); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+		return nil, nil, err
+	}
 }
 
 func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
@@ -249,32 +330,49 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	// Add keyString to the full key resource for structured output.
 	keyResp["keyString"] = ks.KeyString
 
-	w, closer, err := outWriter(outputFile)
+	w, closer, err := createAPIKeyOutWriter(outputFile)
 	if err != nil {
 		return err
 	}
-	defer closer()
+	finishWrite := func(writeErr error) error {
+		closeErr := closer()
+		if writeErr != nil {
+			if closeErr != nil {
+				return errors.Join(writeErr, closeErr)
+			}
+			return writeErr
+		}
+		return closeErr
+	}
 
 	if keyOnly {
 		_, err := fmt.Fprintln(w, ks.KeyString)
-		return err
+		return finishWrite(err)
 	}
 
 	if outputFormat == "txtar" {
 		fmt.Fprintf(os.Stderr, "WARNING: format %q not supported for create-api-key, falling back to text\n", outputFormat)
 	}
 	if outputFormat == "text" || outputFormat == "txtar" {
-		fmt.Fprintf(w, "Name:          %s\n", keyName)
+		if _, err := fmt.Fprintf(w, "Name:          %s\n", keyName); err != nil {
+			return finishWrite(err)
+		}
 		if dn, ok := keyResp["displayName"].(string); ok && dn != "" {
-			fmt.Fprintf(w, "Display Name:  %s\n", dn)
+			if _, err := fmt.Fprintf(w, "Display Name:  %s\n", dn); err != nil {
+				return finishWrite(err)
+			}
 		}
-		fmt.Fprintf(w, "API Key:       %s\n", ks.KeyString)
+		if _, err := fmt.Fprintf(w, "API Key:       %s\n", ks.KeyString); err != nil {
+			return finishWrite(err)
+		}
 		if targets := extractAPITargets(keyResp); len(targets) > 0 {
-			fmt.Fprintf(w, "Restricted to: %s\n", strings.Join(targets, ", "))
+			if _, err := fmt.Fprintf(w, "Restricted to: %s\n", strings.Join(targets, ", ")); err != nil {
+				return finishWrite(err)
+			}
 		}
-		return nil
+		return finishWrite(nil)
 	}
-	return writeFormatted(w, outputFormat, keyResp)
+	return finishWrite(writeFormatted(w, outputFormat, keyResp))
 }
 
 // extractAPITargets returns the service names from the restrictions.apiTargets

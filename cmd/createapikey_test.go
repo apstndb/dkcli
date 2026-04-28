@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,13 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 )
+
+func requireUnixLikePermissions(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission bits are not reliable on Windows")
+	}
+}
 
 func TestResolveProjectID(t *testing.T) {
 	// Not parallel: modifies global projectID and env vars.
@@ -130,6 +138,127 @@ func TestQuotaProjectTransport(t *testing.T) {
 
 	if gotHeader != "my-project" {
 		t.Errorf("x-goog-user-project = %q, want %q", gotHeader, "my-project")
+	}
+}
+
+func TestCreateAPIKeyOutWriter_CreatesFilesWithOwnerOnlyPermissions(t *testing.T) {
+	requireUnixLikePermissions(t)
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	w, closer, err := createAPIKeyOutWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := closer(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if _, err := w.Write([]byte("secret")); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != createAPIKeyFileMode {
+		t.Fatalf("permissions = %04o, want %04o", got, createAPIKeyFileMode)
+	}
+}
+
+func TestCreateAPIKeyOutWriter_RejectsExistingFilesWithBroadPermissions(t *testing.T) {
+	requireUnixLikePermissions(t)
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := createAPIKeyOutWriter(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "0600") {
+		t.Fatalf("error = %q, want 0600 guidance", err)
+	}
+}
+
+func TestCreateAPIKeyOutWriter_AllowsExistingOwnerOnlyFiles(t *testing.T) {
+	requireUnixLikePermissions(t)
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("old"), createAPIKeyFileMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, createAPIKeyFileMode); err != nil {
+		t.Fatal(err)
+	}
+
+	w, closer, err := createAPIKeyOutWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := closer(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	if _, err := w.Write([]byte("new")); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new" {
+		t.Fatalf("contents = %q, want %q", got, "new")
+	}
+}
+
+func TestCreateAPIKeyOutWriter_RejectsExistingOwnerOnlyReadOnlyFiles(t *testing.T) {
+	requireUnixLikePermissions(t)
+
+	path := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(path, []byte("old"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := createAPIKeyOutWriter(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "owner write") {
+		t.Fatalf("error = %q, want owner write guidance", err)
+	}
+}
+
+func TestCreateAPIKeyOutWriter_RejectsSymlinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink setup varies on Windows")
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.txt")
+	if err := os.WriteFile(target, []byte("old"), createAPIKeyFileMode); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "secret-link.txt")
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := createAPIKeyOutWriter(path)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("error = %q, want symlink guidance", err)
 	}
 }
 
