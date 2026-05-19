@@ -82,9 +82,18 @@ Use `--filter` when you need to stay within a specific data source or time range
 dkcli search --filter 'dataSource = "docs.cloud.google.com"' "BigQuery"
 ```
 
-### Step 2: Get the full document
+### Step 2: Get the full document(s)
 
-Once you know the document name from search results, retrieve the full page:
+Once you know the document name(s) from search results, retrieve the full page(s).
+When search returns multiple relevant results, use `batch-get` to fetch them all.
+The API limits each call to 20 documents; `batch-get` automatically chunks larger
+lists into multiple calls:
+
+```bash
+dkcli batch-get docs.cloud.google.com/storage/docs/creating-buckets docs.cloud.google.com/storage/docs/storage-classes
+```
+
+If you only need a single document, `get` works the same way:
 
 ```bash
 dkcli get docs.cloud.google.com/storage/docs/creating-buckets
@@ -98,7 +107,7 @@ dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
 
 ### When you already know the document
 
-If you can reasonably guess the URL of the documentation page (e.g., the user gave you a link, or you know the path pattern), skip search and go straight to `dkcli get`. This saves a round trip.
+If you can reasonably guess the URL of the documentation page (e.g., the user gave you a link, or you know the path pattern), skip search and go straight to `dkcli get` (or `dkcli batch-get` for multiple pages). This saves a round trip.
 
 ### Getting multiple documents
 
@@ -128,7 +137,7 @@ dkcli batch-get docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to
 
 Search results now also include embedded document metadata under `results[].document` in structured output.
 
-### Grounded answers
+### Grounded answers (use with caution)
 
 For a quick generated answer instead of raw document content, use:
 
@@ -137,6 +146,8 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 ```
 
 This command calls the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC if a quota project is available.
+
+**Caveat:** The `answer-query` endpoint returns generated text only. It does not include source URLs, grounding chunks, or citations, so you cannot verify which documents the answer is based on. Because of this limitation, **prefer the `search` + `get` workflow for authoritative or verifiable information**. Use `answer-query` only when you need a quick overview and accuracy is less critical.
 
 ## Combining with shell tools
 
@@ -172,24 +183,25 @@ dkcli batch-get -f txtar docs.cloud.google.com/doc1 docs.cloud.google.com/doc2  
 
 ## Error handling
 
-Developer Knowledge API commands prefer `DEVELOPERKNOWLEDGE_API_KEY` or `GOOGLE_API_KEY` when either is set, except `create-api-key`. If neither is set, dkcli falls back to ADC.
+Developer Knowledge API commands use Application Default Credentials (ADC) by default, except `create-api-key` which always requires ADC. If an API key environment variable is set (`DEVELOPERKNOWLEDGE_API_KEY` or `GOOGLE_API_KEY`), dkcli uses it instead of ADC.
 
 When using local ADC, the Developer Knowledge API also requires a quota project. dkcli resolves that from `GOOGLE_CLOUD_QUOTA_PROJECT` or `quota_project_id` in the ADC file. The standard way to set that up is `gcloud auth application-default set-quota-project <project-id>`.
 
-If dkcli fails because neither an API key nor ADC is available, suggest:
+If dkcli fails because ADC is not available, suggest:
 
 ```bash
-# Option 1: use ADC
+# Option 1: set up ADC (recommended)
 gcloud auth application-default login
+gcloud auth application-default set-quota-project <project-id>
 
-# Option 2: create a key and set it in the current shell (requires ADC once)
+# Option 2: create an API key and set it in the current shell (requires ADC once)
 export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p <gcp-project-id> --key-only)
 
 # To persist, append to shell profile
 echo "export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p <gcp-project-id> --key-only)" >> ~/.zshrc
 ```
 
-If the user already has a key, they just need to set the environment variable:
+If the user already has an API key and prefers to use it, they just need to set the environment variable:
 ```bash
 export DEVELOPERKNOWLEDGE_API_KEY=<key>
 ```
