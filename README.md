@@ -121,7 +121,7 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 | Flag | Description |
 |------|-------------|
 | `--outdir` | Write each document to a separate file under this directory |
-| `--frontmatter` | Prepend YAML frontmatter to content (text format only) |
+| `--frontmatter` | Prepend YAML frontmatter to content (`--format=text` only; incompatible with `--size-only`) |
 | `--size-only` | Print document sizes only, suppress content |
 
 ### `create-api-key`
