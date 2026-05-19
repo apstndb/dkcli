@@ -29,7 +29,7 @@ var searchCmd = &cobra.Command{
 }
 
 func init() {
-	searchCmd.Flags().IntVar(&pageSize, "page-size", 0, "max results to return (default: 5, max: 20)")
+	searchCmd.Flags().IntVar(&pageSize, "page-size", 0, "max results to return (max: 20, default is set by the API)")
 	searchCmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from previous response")
 	searchCmd.Flags().BoolVarP(&autoPaging, "auto-paging", "a", false, "automatically fetch subsequent pages")
 	searchCmd.Flags().IntVar(&maxPages, "max-pages", 5, "max pages to fetch with --auto-paging (0 for unlimited)")
