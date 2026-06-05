@@ -373,7 +373,26 @@ func TestYAMLTagsUseSnakeCase(t *testing.T) {
 			NextPageToken: "next-token",
 		},
 		"answer": answerQueryResponse{
-			Answer: Answer{AnswerText: "grounded"},
+			Answer: Answer{
+				AnswerText: "grounded",
+				Citations: []AnswerCitation{{
+					StartIndex: 0,
+					EndIndex:   8,
+					Sources:    []CitationSource{{ReferenceIndex: 0}},
+				}},
+				References: []AnswerReference{{
+					DocumentReference: &DocumentReference{
+						DocumentChunk: &DocumentChunk{
+							Parent: "documents/example.com/a",
+							ID:     "chunk-1",
+							Document: &Document{
+								DataSource: "example.com",
+								UpdateTime: "2026-04-18T00:00:00Z",
+							},
+						},
+					},
+				}},
+			},
 		},
 	})
 	if err != nil {
@@ -381,12 +400,32 @@ func TestYAMLTagsUseSnakeCase(t *testing.T) {
 	}
 
 	text := string(got)
-	for _, want := range []string{"data_source:", "update_time:", "next_page_token:", "answer_text:"} {
+	for _, want := range []string{
+		"data_source:",
+		"update_time:",
+		"next_page_token:",
+		"answer_text:",
+		"start_index:",
+		"end_index:",
+		"reference_index:",
+		"document_reference:",
+		"document_chunk:",
+	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("yaml output %q does not contain %q", text, want)
 		}
 	}
-	for _, unwanted := range []string{"dataSource:", "updateTime:", "nextPageToken:", "answerText:"} {
+	for _, unwanted := range []string{
+		"dataSource:",
+		"updateTime:",
+		"nextPageToken:",
+		"answerText:",
+		"startIndex:",
+		"endIndex:",
+		"referenceIndex:",
+		"documentReference:",
+		"documentChunk:",
+	} {
 		if strings.Contains(text, unwanted) {
 			t.Fatalf("yaml output %q unexpectedly contains %q", text, unwanted)
 		}

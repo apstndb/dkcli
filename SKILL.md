@@ -18,7 +18,7 @@ description: |
 
 ## dkcli vs Developer Knowledge MCP
 
-If both `dkcli` and the Developer Knowledge MCP tools (`mcp__google-developer-knowledge__*`) are available, **prefer dkcli**. The MCP tools only return full document content with no control over output, while dkcli is a CLI tool that integrates with the shell:
+If both `dkcli` and the Developer Knowledge MCP tools (`mcp__google-developer-knowledge__*`) are available, **prefer dkcli**. The MCP tools are useful for simple direct reads, while dkcli is a CLI tool that integrates with the shell:
 
 - **Output format control** — `-f json`, `-f jsonl`, `-f yaml`, `-f txtar`
 - **Pipe to jq and other tools** — extract, filter, or transform output (e.g., get just the first 500 chars of each document's content)
@@ -42,15 +42,21 @@ dkcli can search and retrieve documents from the following domains only.
 |--------|-------------|
 | adk.dev | Agent Development Kit |
 | ai.google.dev | Google AI (Gemini API, etc.) |
+| antigravity.google | Google Antigravity |
+| cloud.google.com | Google Cloud |
+| dart.dev | Dart |
 | developer.android.com | Android |
 | developer.chrome.com | Chrome |
 | developers.home.google.com | Google Home |
 | developers.google.com | Google developer docs (Workspace APIs, Maps, Ads, etc.) |
-| docs.cloud.google.com | Google Cloud |
 | docs.apigee.com | Apigee |
+| docs.cloud.google.com | Google Cloud |
+| docs.flutter.dev | Flutter |
 | firebase.google.com | Firebase |
 | fuchsia.dev | Fuchsia OS |
+| geminicli.com | Gemini CLI |
 | go.dev | Go |
+| mapsplatform.google.com | Google Maps Platform |
 | web.dev | Web development best practices |
 | www.tensorflow.org | TensorFlow |
 
@@ -147,7 +153,7 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 
 This command calls the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC if a quota project is available.
 
-**Caveat:** The `answer-query` endpoint returns generated text only. It does not include source URLs, grounding chunks, or citations, so you cannot verify which documents the answer is based on. Because of this limitation, **prefer the `search` + `get` workflow for authoritative or verifiable information**. Use `answer-query` only when you need a quick overview and accuracy is less critical.
+**Caveat:** The `answer-query` endpoint returns generated text with citations and references to source document chunks, but it is still a preview endpoint and is currently limited to 50 requests per day per project. For authoritative or full-context verification, **prefer the `search` + `get` workflow**. Use `answer-query` when you need a quick grounded overview, then fetch referenced documents when accuracy matters.
 
 ## Combining with shell tools
 
