@@ -85,7 +85,7 @@ dkcli search -a "BigQuery partitioned tables"
 Use `--filter` when you need to stay within a specific data source or time range:
 
 ```bash
-dkcli search --filter 'dataSource = "docs.cloud.google.com"' "BigQuery"
+dkcli search --filter 'data_source = "docs.cloud.google.com"' "BigQuery"
 ```
 
 ### Step 2: Get the full document(s)

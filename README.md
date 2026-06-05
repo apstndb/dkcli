@@ -39,7 +39,7 @@ dkcli search "how to create a Cloud Storage bucket"
 dkcli search -a "Cloud Storage"
 
 # Restrict results to a specific corpus source
-dkcli search --filter 'dataSource = "docs.cloud.google.com"' "BigQuery"
+dkcli search --filter 'data_source = "docs.cloud.google.com"' "BigQuery"
 
 # Fetch more pages
 dkcli search -a --max-pages 20 "Cloud Storage"
