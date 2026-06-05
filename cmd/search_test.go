@@ -86,13 +86,13 @@ func TestFetchSearchPage_WithFilter(t *testing.T) {
 	t.Parallel()
 
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("filter"); got != `dataSource="docs.cloud.google.com"` {
-			t.Errorf("filter = %q, want %q", got, `dataSource="docs.cloud.google.com"`)
+		if got := r.URL.Query().Get("filter"); got != `data_source="docs.cloud.google.com"` {
+			t.Errorf("filter = %q, want %q", got, `data_source="docs.cloud.google.com"`)
 		}
 		json.NewEncoder(w).Encode(&searchResponse{})
 	}))
 
-	_, err := client.fetchSearchPage("test", 0, "", `dataSource="docs.cloud.google.com"`)
+	_, err := client.fetchSearchPage("test", 0, "", `data_source="docs.cloud.google.com"`)
 	if err != nil {
 		t.Fatal(err)
 	}
