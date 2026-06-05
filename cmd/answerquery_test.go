@@ -34,7 +34,26 @@ func TestAnswerQuery(t *testing.T) {
 		}
 
 		json.NewEncoder(w).Encode(answerQueryResponse{
-			Answer: Answer{AnswerText: "dkcli is a CLI for Developer Knowledge."},
+			Answer: Answer{
+				AnswerText: "dkcli is a CLI for Developer Knowledge.",
+				Citations: []AnswerCitation{{
+					StartIndex: 0,
+					EndIndex:   5,
+					Sources:    []CitationSource{{ReferenceIndex: 0}},
+				}},
+				References: []AnswerReference{{
+					DocumentReference: &DocumentReference{
+						DocumentChunk: &DocumentChunk{
+							Parent: "documents/developers.google.com/knowledge/api",
+							ID:     "chunk-1",
+							Document: &Document{
+								Title: "Developer Knowledge API",
+								URI:   "https://developers.google.com/knowledge/api",
+							},
+						},
+					},
+				}},
+			},
 		})
 	}))
 	t.Cleanup(srv.Close)
@@ -52,16 +71,46 @@ func TestAnswerQuery(t *testing.T) {
 	if resp.Answer.AnswerText != "dkcli is a CLI for Developer Knowledge." {
 		t.Fatalf("answer = %q", resp.Answer.AnswerText)
 	}
+	if len(resp.Answer.Citations) != 1 {
+		t.Fatalf("citations = %d, want 1", len(resp.Answer.Citations))
+	}
+	if got := resp.Answer.Citations[0].Sources[0].ReferenceIndex; got != 0 {
+		t.Fatalf("reference index = %d, want 0", got)
+	}
+	if len(resp.Answer.References) != 1 {
+		t.Fatalf("references = %d, want 1", len(resp.Answer.References))
+	}
+	ref := resp.Answer.References[0].DocumentReference
+	if ref == nil || ref.DocumentChunk == nil || ref.DocumentChunk.Document == nil {
+		t.Fatal("expected document reference with document chunk metadata")
+	}
+	if got := ref.DocumentChunk.Document.URI; got != "https://developers.google.com/knowledge/api" {
+		t.Fatalf("reference URI = %q", got)
+	}
 }
 
-func TestRunAnswerQueryWritesWarningToCommandErr(t *testing.T) {
+func TestRunAnswerQueryTextIncludesReferences(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1alpha:answerQuery" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		json.NewEncoder(w).Encode(answerQueryResponse{
-			Answer: Answer{AnswerText: "dkcli is a CLI for Developer Knowledge."},
+			Answer: Answer{
+				AnswerText: "dkcli is a CLI for Developer Knowledge.",
+				References: []AnswerReference{{
+					DocumentReference: &DocumentReference{
+						DocumentChunk: &DocumentChunk{
+							Parent: "documents/developers.google.com/knowledge/api",
+							ID:     "chunk-1",
+							Document: &Document{
+								Title: "Developer Knowledge API",
+								URI:   "https://developers.google.com/knowledge/api",
+							},
+						},
+					},
+				}},
+			},
 		})
 	}))
 	t.Cleanup(srv.Close)
@@ -94,22 +143,47 @@ func TestRunAnswerQueryWritesWarningToCommandErr(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	warning := stderr.String()
-	if !strings.Contains(warning, "does not include source URLs or grounding chunks") {
-		t.Fatalf("warning = %q, want source URL caveat", warning)
-	}
-	if strings.Contains(warning, "|") {
-		t.Fatalf("warning should not imply pipe support: %q", warning)
-	}
-	if !strings.Contains(warning, "dkcli get <document-name>") {
-		t.Fatalf("warning = %q, want get positional argument guidance", warning)
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
 	}
 
 	data, err := os.ReadFile(outputFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != "dkcli is a CLI for Developer Knowledge.\n" {
-		t.Fatalf("output = %q", data)
+	for _, want := range []string{
+		"dkcli is a CLI for Developer Knowledge.\n",
+		"\nReferences:\n",
+		"[1] Developer Knowledge API - https://developers.google.com/knowledge/api\n",
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("output = %q, want to contain %q", data, want)
+		}
+	}
+}
+
+func TestFormatAnswerTextNil(t *testing.T) {
+	if got := formatAnswerText(nil); got != "" {
+		t.Fatalf("formatAnswerText(nil) = %q, want empty", got)
+	}
+}
+
+func TestFormatAnswerTextEmpty(t *testing.T) {
+	if got := formatAnswerText(&Answer{}); got != "" {
+		t.Fatalf("formatAnswerText(empty) = %q, want empty", got)
+	}
+}
+
+func TestFormatAnswerTextReferenceFallback(t *testing.T) {
+	got := formatAnswerText(&Answer{
+		References: []AnswerReference{{
+			DocumentReference: &DocumentReference{
+				DocumentChunk: &DocumentChunk{},
+			},
+		}},
+	})
+	want := "References:\n[1] Untitled\n"
+	if got != want {
+		t.Fatalf("formatAnswerText(reference only) = %q, want %q", got, want)
 	}
 }

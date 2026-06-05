@@ -87,7 +87,13 @@ Uses the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC i
 dkcli answer-query "How do I create a Cloud Storage bucket?"
 ```
 
-**Note:** This endpoint returns generated text without source URLs or grounding chunks. For verifiable information, prefer the `search` + `get` workflow.
+The text output prints the generated answer followed by source references when
+the API returns them. Structured formats include the full `answer` payload,
+including citation spans and referenced document chunks.
+
+**Note:** This endpoint is a preview surface and is currently limited to 50
+requests per day per project. For full-document verification, prefer the
+`search` + `get` workflow.
 
 ## Global flags
 
