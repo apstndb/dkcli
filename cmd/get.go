@@ -105,7 +105,9 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	printDocSummary(cmd.ErrOrStderr(), &doc)
+	if sizeOnly || outputFormat == "text" {
+		printDocSummary(cmd.ErrOrStderr(), &doc)
+	}
 
 	if sizeOnly {
 		return nil

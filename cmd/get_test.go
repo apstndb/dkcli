@@ -1,13 +1,17 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/time/rate"
 )
 
 func TestNormalizeDocName(t *testing.T) {
@@ -147,6 +151,78 @@ func TestFetchGet(t *testing.T) {
 	}
 	if got.Content != doc.Content {
 		t.Errorf("content = %q, want %q", got.Content, doc.Content)
+	}
+}
+
+func TestRunGetPrintsSummaryOnlyForTextOrSizeOnly(t *testing.T) {
+	tests := []struct {
+		name        string
+		format      string
+		sizeOnly    bool
+		wantSummary bool
+	}{
+		{name: "text", format: "text", wantSummary: true},
+		{name: "json", format: "json", wantSummary: false},
+		{name: "jsonl", format: "jsonl", wantSummary: false},
+		{name: "yaml", format: "yaml", wantSummary: false},
+		{name: "txtar", format: "txtar", wantSummary: false},
+		{name: "size_only_json", format: "json", sizeOnly: true, wantSummary: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Document{
+				Name:    "documents/example.com/page",
+				URI:     "https://example.com/page",
+				Content: "hello\n",
+			}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/documents/example.com/page" {
+					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+				json.NewEncoder(w).Encode(doc)
+			}))
+			t.Cleanup(srv.Close)
+
+			t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "test-key")
+			t.Setenv("GOOGLE_API_KEY", "")
+
+			origBaseURL := searchBaseURL
+			origLimiter := apiLimiter
+			origOutputFormat := outputFormat
+			origOutputFile := outputFile
+			origFrontmatter := frontmatter
+			origSizeOnly := sizeOnly
+			t.Cleanup(func() {
+				searchBaseURL = origBaseURL
+				apiLimiter = origLimiter
+				outputFormat = origOutputFormat
+				outputFile = origOutputFile
+				frontmatter = origFrontmatter
+				sizeOnly = origSizeOnly
+			})
+
+			searchBaseURL = srv.URL + "/v1"
+			apiLimiter = rate.NewLimiter(rate.Inf, 1)
+			outputFormat = tt.format
+			outputFile = filepath.Join(t.TempDir(), "out"+formatExtension(tt.format))
+			frontmatter = false
+			sizeOnly = tt.sizeOnly
+
+			var stderr bytes.Buffer
+			cmd := &cobra.Command{}
+			cmd.SetContext(context.Background())
+			cmd.SetErr(&stderr)
+			if err := runGet(cmd, []string{"documents/example.com/page"}); err != nil {
+				t.Fatal(err)
+			}
+
+			hasSummary := strings.Contains(stderr.String(), "documents/example.com/page")
+			if hasSummary != tt.wantSummary {
+				t.Fatalf("stderr summary present = %t, want %t; stderr: %q", hasSummary, tt.wantSummary, stderr.String())
+			}
+		})
 	}
 }
 
