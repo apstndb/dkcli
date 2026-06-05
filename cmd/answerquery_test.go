@@ -1,11 +1,17 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
 )
 
@@ -45,5 +51,65 @@ func TestAnswerQuery(t *testing.T) {
 	}
 	if resp.Answer.AnswerText != "dkcli is a CLI for Developer Knowledge." {
 		t.Fatalf("answer = %q", resp.Answer.AnswerText)
+	}
+}
+
+func TestRunAnswerQueryWritesWarningToCommandErr(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1alpha:answerQuery" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(answerQueryResponse{
+			Answer: Answer{AnswerText: "dkcli is a CLI for Developer Knowledge."},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "test-key")
+	t.Setenv("GOOGLE_API_KEY", "")
+
+	origBaseURL := answerQueryBaseURL
+	origLimiter := apiLimiter
+	origOutputFormat := outputFormat
+	origOutputFile := outputFile
+	t.Cleanup(func() {
+		answerQueryBaseURL = origBaseURL
+		apiLimiter = origLimiter
+		outputFormat = origOutputFormat
+		outputFile = origOutputFile
+	})
+
+	answerQueryBaseURL = srv.URL + "/v1alpha"
+	apiLimiter = rate.NewLimiter(rate.Inf, 1)
+	outputFormat = "text"
+	outputFile = filepath.Join(t.TempDir(), "answer.txt")
+
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	cmd.SetErr(&stderr)
+
+	if err := runAnswerQuery(cmd, []string{"what", "is", "dkcli?"}); err != nil {
+		t.Fatal(err)
+	}
+
+	warning := stderr.String()
+	if !strings.Contains(warning, "does not include source URLs or grounding chunks") {
+		t.Fatalf("warning = %q, want source URL caveat", warning)
+	}
+	if strings.Contains(warning, "|") {
+		t.Fatalf("warning should not imply pipe support: %q", warning)
+	}
+	if !strings.Contains(warning, "dkcli get <document-name>") {
+		t.Fatalf("warning = %q, want get positional argument guidance", warning)
+	}
+
+	data, err := os.ReadFile(outputFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "dkcli is a CLI for Developer Knowledge.\n" {
+		t.Fatalf("output = %q", data)
 	}
 }

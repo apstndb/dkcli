@@ -423,23 +423,23 @@ func writeFormatted(w io.Writer, format string, v any) error {
 	}
 }
 
-// printDocSummary prints a one-line summary of a document to stderr.
-func printDocSummary(doc *Document) {
-	fmt.Fprintf(os.Stderr, "%s (%d bytes, %d lines)\n",
+// printDocSummary prints a one-line summary of a document to w.
+func printDocSummary(w io.Writer, doc *Document) {
+	fmt.Fprintf(w, "%s (%d bytes, %d lines)\n",
 		doc.Name, len(doc.Content), strings.Count(doc.Content, "\n"))
 }
 
-// printDocsSummary prints a per-document summary plus a total line to stderr.
-func printDocsSummary(docs []Document) {
+// printDocsSummary prints a per-document summary plus a total line to w.
+func printDocsSummary(w io.Writer, docs []Document) {
 	totalBytes := 0
 	totalLines := 0
 	for i := range docs {
-		printDocSummary(&docs[i])
+		printDocSummary(w, &docs[i])
 		totalBytes += len(docs[i].Content)
 		totalLines += strings.Count(docs[i].Content, "\n")
 	}
 	if len(docs) > 1 {
-		fmt.Fprintf(os.Stderr, "total: %d documents, %d bytes, %d lines\n", len(docs), totalBytes, totalLines)
+		fmt.Fprintf(w, "total: %d documents, %d bytes, %d lines\n", len(docs), totalBytes, totalLines)
 	}
 }
 

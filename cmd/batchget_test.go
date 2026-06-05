@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -259,75 +258,19 @@ func TestRunBatchGetPrintsSummaryOnlyForTextOutput(t *testing.T) {
 			batchFrontmatter = false
 			sizeOnly = false
 
-			stderr := captureStderr(t, func() error {
-				cmd := &cobra.Command{}
-				cmd.SetContext(context.Background())
-				return runBatchGet(cmd, []string{"documents/example.com/a"})
-			})
+			var stderr strings.Builder
+			cmd := &cobra.Command{}
+			cmd.SetContext(context.Background())
+			cmd.SetErr(&stderr)
+			if err := runBatchGet(cmd, []string{"documents/example.com/a"}); err != nil {
+				t.Fatal(err)
+			}
 
-			hasSummary := strings.Contains(stderr, "documents/example.com/a")
+			hasSummary := strings.Contains(stderr.String(), "documents/example.com/a")
 			if hasSummary != tt.wantSummary {
-				t.Fatalf("stderr summary present = %t, want %t; stderr: %q", hasSummary, tt.wantSummary, stderr)
+				t.Fatalf("stderr summary present = %t, want %t; stderr: %q", hasSummary, tt.wantSummary, stderr.String())
 			}
 		})
-	}
-}
-
-func captureStderr(t *testing.T, fn func() error) string {
-	t.Helper()
-
-	origStderr := os.Stderr
-	t.Cleanup(func() { os.Stderr = origStderr })
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = r.Close()
-		_ = w.Close()
-	})
-
-	type readResult struct {
-		data []byte
-		err  error
-	}
-	readCh := make(chan readResult, 1)
-	go func() {
-		data, err := io.ReadAll(r)
-		readCh <- readResult{data: data, err: err}
-	}()
-
-	os.Stderr = w
-	defer func() {
-		os.Stderr = origStderr
-		_ = w.Close()
-	}()
-	err = fn()
-	os.Stderr = origStderr
-	if closeErr := w.Close(); closeErr != nil {
-		t.Fatal(closeErr)
-	}
-	result := <-readCh
-	if result.err != nil {
-		t.Fatal(result.err)
-	}
-	if closeErr := r.Close(); closeErr != nil {
-		t.Fatal(closeErr)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(result.data)
-}
-
-func TestCaptureStderrHandlesLargeOutput(t *testing.T) {
-	want := strings.Repeat("x", 128*1024)
-	got := captureStderr(t, func() error {
-		_, err := fmt.Fprint(os.Stderr, want)
-		return err
-	})
-	if got != want {
-		t.Fatalf("captured %d bytes, want %d", len(got), len(want))
 	}
 }
 

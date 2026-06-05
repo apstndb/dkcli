@@ -333,7 +333,7 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 	}
 
 	if sizeOnly {
-		printDocsSummary(docs)
+		printDocsSummary(cmd.ErrOrStderr(), docs)
 	}
 
 	var outputErr error
@@ -349,7 +349,7 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		defer closer()
 		outputErr = printBatchOutput(w, docs, outputFormat, batchFrontmatter)
 		if outputErr == nil && outputFormat == "text" {
-			printDocsSummary(docs)
+			printDocsSummary(cmd.ErrOrStderr(), docs)
 		}
 	}
 	if outputErr != nil {
