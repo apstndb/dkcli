@@ -282,16 +282,34 @@ func captureStderr(t *testing.T, fn func() error) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		_ = r.Close()
+		_ = w.Close()
+	})
+
+	type readResult struct {
+		data []byte
+		err  error
+	}
+	readCh := make(chan readResult, 1)
+	go func() {
+		data, err := io.ReadAll(r)
+		readCh <- readResult{data: data, err: err}
+	}()
+
 	os.Stderr = w
+	defer func() {
+		os.Stderr = origStderr
+		_ = w.Close()
+	}()
 	err = fn()
+	os.Stderr = origStderr
 	if closeErr := w.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	os.Stderr = origStderr
-
-	data, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatal(readErr)
+	result := <-readCh
+	if result.err != nil {
+		t.Fatal(result.err)
 	}
 	if closeErr := r.Close(); closeErr != nil {
 		t.Fatal(closeErr)
@@ -299,7 +317,18 @@ func captureStderr(t *testing.T, fn func() error) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(data)
+	return string(result.data)
+}
+
+func TestCaptureStderrHandlesLargeOutput(t *testing.T) {
+	want := strings.Repeat("x", 128*1024)
+	got := captureStderr(t, func() error {
+		_, err := fmt.Fprint(os.Stderr, want)
+		return err
+	})
+	if got != want {
+		t.Fatalf("captured %d bytes, want %d", len(got), len(want))
+	}
 }
 
 func TestFetchBatchBisect(t *testing.T) {
