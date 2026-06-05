@@ -78,6 +78,10 @@ func (c *apiClient) answerQuery(query string) (*answerQueryResponse, error) {
 }
 
 func formatAnswerText(answer *Answer) string {
+	if answer == nil {
+		return ""
+	}
+
 	var sb strings.Builder
 	sb.WriteString(answer.AnswerText)
 	if !strings.HasSuffix(answer.AnswerText, "\n") {

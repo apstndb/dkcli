@@ -161,3 +161,9 @@ func TestRunAnswerQueryTextIncludesReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatAnswerTextNil(t *testing.T) {
+	if got := formatAnswerText(nil); got != "" {
+		t.Fatalf("formatAnswerText(nil) = %q, want empty", got)
+	}
+}
