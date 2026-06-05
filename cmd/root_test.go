@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -315,6 +316,50 @@ func TestAPIClient_DoRequestCancelsRetryBackoff(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+}
+
+func TestDocContentLines(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+		want    int
+	}{
+		{name: "empty", content: "", want: 0},
+		{name: "one_line_no_newline", content: "hello", want: 1},
+		{name: "one_line_with_newline", content: "hello\n", want: 1},
+		{name: "two_lines_no_trailing_newline", content: "hello\nworld", want: 2},
+		{name: "two_lines_with_trailing_newline", content: "hello\nworld\n", want: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := docContentLines(tt.content); got != tt.want {
+				t.Fatalf("docContentLines(%q) = %d, want %d", tt.content, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrintDocsSummaryLineCounts(t *testing.T) {
+	var buf bytes.Buffer
+	printDocsSummary(&buf, []Document{
+		{Name: "documents/example.com/a", Content: "one line"},
+		{Name: "documents/example.com/b", Content: "two\nlines\n"},
+	})
+
+	got := buf.String()
+	for _, want := range []string{
+		"documents/example.com/a (8 bytes, 1 lines)",
+		"documents/example.com/b (10 bytes, 2 lines)",
+		"total: 2 documents, 18 bytes, 3 lines",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("summary %q does not contain %q", got, want)
+		}
 	}
 }
 

@@ -423,10 +423,18 @@ func writeFormatted(w io.Writer, format string, v any) error {
 	}
 }
 
+func docContentLines(content string) int {
+	lines := strings.Count(content, "\n")
+	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+		lines++
+	}
+	return lines
+}
+
 // printDocSummary prints a one-line summary of a document to w.
 func printDocSummary(w io.Writer, doc *Document) {
 	fmt.Fprintf(w, "%s (%d bytes, %d lines)\n",
-		doc.Name, len(doc.Content), strings.Count(doc.Content, "\n"))
+		doc.Name, len(doc.Content), docContentLines(doc.Content))
 }
 
 // printDocsSummary prints a per-document summary plus a total line to w.
@@ -436,7 +444,7 @@ func printDocsSummary(w io.Writer, docs []Document) {
 	for i := range docs {
 		printDocSummary(w, &docs[i])
 		totalBytes += len(docs[i].Content)
-		totalLines += strings.Count(docs[i].Content, "\n")
+		totalLines += docContentLines(docs[i].Content)
 	}
 	if len(docs) > 1 {
 		fmt.Fprintf(w, "total: %d documents, %d bytes, %d lines\n", len(docs), totalBytes, totalLines)
