@@ -1,6 +1,6 @@
 # dkcli
 
-CLI client for the [Google Developer Knowledge API](https://developerknowledge.googleapis.com/).
+CLI client for the [Google Developer Knowledge API](https://developers.google.com/knowledge/api).
 
 ## Install
 
@@ -10,21 +10,23 @@ go install github.com/apstndb/dkcli@latest
 
 ## Authentication
 
-Developer Knowledge API commands prefer an API key when one is configured, except `create-api-key`:
+Developer Knowledge API commands use Application Default Credentials (ADC) by default, except `create-api-key` which always requires ADC.
 
-```
-export DEVELOPERKNOWLEDGE_API_KEY=<your-key>
-# or
-export GOOGLE_API_KEY=<your-key>
-```
-
-If neither variable is set, dkcli falls back to an OAuth access token from Application Default Credentials:
+Set up ADC:
 
 ```
 gcloud auth application-default login
 ```
 
 When using local ADC, the Developer Knowledge API also requires a quota project. dkcli reads that from `GOOGLE_CLOUD_QUOTA_PROJECT` or `quota_project_id` in the ADC file. The standard way to set that up is `gcloud auth application-default set-quota-project <project-id>`.
+
+If you prefer to use an API key instead of ADC, set one of the following environment variables:
+
+```
+export DEVELOPERKNOWLEDGE_API_KEY=<your-key>
+# or
+export GOOGLE_API_KEY=<your-key>
+```
 
 ## Usage
 
@@ -49,8 +51,9 @@ dkcli search -a --max-pages 20 "Cloud Storage"
 dkcli get docs.cloud.google.com/storage/docs/creating-buckets
 # Full URL also works
 dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
-
 ```
+
+If you already know the document URL, skip `search` and go straight to `get` or `batch-get`.
 
 ### Get multiple documents
 
@@ -61,7 +64,7 @@ dkcli batch-get docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to
 dkcli batch-get --outdir out docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2
 
 # With YAML frontmatter
-dkcli batch-get --outdir out --frontmatter docs.cloud.google.com/path/to/doc1
+dkcli batch-get --outdir out --frontmatter docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2
 
 ```
 
@@ -84,6 +87,8 @@ Uses the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC i
 dkcli answer-query "How do I create a Cloud Storage bucket?"
 ```
 
+**Note:** This endpoint returns generated text without source URLs or grounding chunks. For verifiable information, prefer the `search` + `get` workflow.
+
 ## Global flags
 
 | Flag | Short | Description |
@@ -98,7 +103,7 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 
 | Flag | Description |
 |------|-------------|
-| `--page-size` | Max results to return (default: 5, max: 20) |
+| `--page-size` | Max results to return (max: 20, default is set by the API) |
 | `--page-token` | Pagination token from previous response |
 | `--auto-paging`, `-a` | Automatically fetch subsequent pages |
 | `--max-pages` | Max pages to fetch with `--auto-paging` (default: 5, 0 for unlimited) |
@@ -109,13 +114,15 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 | Flag | Description |
 |------|-------------|
 | `--frontmatter` | Prepend YAML frontmatter to content (`--format=text` only; incompatible with `--size-only`) |
+| `--size-only` | Print document size only, suppress content |
 
 ### `batch-get`
 
 | Flag | Description |
 |------|-------------|
 | `--outdir` | Write each document to a separate file under this directory |
-| `--frontmatter` | Prepend YAML frontmatter to content (text format only) |
+| `--frontmatter` | Prepend YAML frontmatter to content (`--format=text` only; incompatible with `--size-only`) |
+| `--size-only` | Print document sizes only, suppress content |
 
 ### `create-api-key`
 
@@ -123,6 +130,7 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 |------|-------|-------------|
 | `--project` | `-p` | GCP project ID (env: `GOOGLE_CLOUD_PROJECT`) |
 | `--display-name` | `-d` | Display name for the key (default: `dkcli`) |
+| `--key-only` |  | Print only the API key string (for use in scripts) |
 
 ## Rate limiting
 

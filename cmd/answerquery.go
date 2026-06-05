@@ -13,7 +13,10 @@ var answerQueryCmd = &cobra.Command{
 	Short: "Answer a query using grounded generation",
 	Long: `Answer a query using the Developer Knowledge grounded generation API.
 
-This endpoint is currently exposed as v1alpha.
+This endpoint is currently exposed as v1alpha and returns generated text only.
+It does NOT include source URLs or grounding chunks, so its accuracy cannot be
+verified directly. For authoritative answers, prefer the "search" + "get"
+workflow instead.
 
 If an API key is configured, dkcli uses it. Otherwise it falls back to ADC.`,
 	Args: cobra.MinimumNArgs(1),
@@ -74,6 +77,8 @@ func runAnswerQuery(cmd *cobra.Command, args []string) error {
 
 	switch outputFormat {
 	case "text":
+		fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: answer-query does not include source URLs or grounding chunks.")
+		fmt.Fprintln(cmd.ErrOrStderr(), "         For verifiable information, run dkcli search, then dkcli get <document-name>.")
 		_, err = fmt.Fprintln(w, resp.Answer.AnswerText)
 		return err
 	case "txtar":

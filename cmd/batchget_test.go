@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,8 +9,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
 )
 
@@ -196,6 +199,78 @@ func TestFetchBatchGet_APIError(t *testing.T) {
 	}
 	if ae.Code != 400 {
 		t.Errorf("error code = %d, want 400", ae.Code)
+	}
+}
+
+func TestRunBatchGetPrintsSummaryOnlyForTextOutput(t *testing.T) {
+	tests := []struct {
+		format      string
+		wantSummary bool
+	}{
+		{format: "text", wantSummary: true},
+		{format: "json", wantSummary: false},
+		{format: "jsonl", wantSummary: false},
+		{format: "yaml", wantSummary: false},
+		{format: "txtar", wantSummary: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.format, func(t *testing.T) {
+			doc := Document{
+				Name:    "documents/example.com/a",
+				URI:     "https://example.com/a",
+				Content: "hello\n",
+			}
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/documents:batchGet" {
+					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+				json.NewEncoder(w).Encode(batchGetResponse{Documents: []Document{doc}})
+			}))
+			t.Cleanup(srv.Close)
+
+			t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "test-key")
+			t.Setenv("GOOGLE_API_KEY", "")
+
+			origBaseURL := searchBaseURL
+			origLimiter := apiLimiter
+			origOutputFormat := outputFormat
+			origOutputFile := outputFile
+			origOutDir := outDir
+			origFrontmatter := batchFrontmatter
+			origSizeOnly := sizeOnly
+			t.Cleanup(func() {
+				searchBaseURL = origBaseURL
+				apiLimiter = origLimiter
+				outputFormat = origOutputFormat
+				outputFile = origOutputFile
+				outDir = origOutDir
+				batchFrontmatter = origFrontmatter
+				sizeOnly = origSizeOnly
+			})
+
+			searchBaseURL = srv.URL + "/v1"
+			apiLimiter = rate.NewLimiter(rate.Inf, 1)
+			outputFormat = tt.format
+			outputFile = filepath.Join(t.TempDir(), "out"+formatExtension(tt.format))
+			outDir = ""
+			batchFrontmatter = false
+			sizeOnly = false
+
+			var stderr strings.Builder
+			cmd := &cobra.Command{}
+			cmd.SetContext(context.Background())
+			cmd.SetErr(&stderr)
+			if err := runBatchGet(cmd, []string{"documents/example.com/a"}); err != nil {
+				t.Fatal(err)
+			}
+
+			hasSummary := strings.Contains(stderr.String(), "documents/example.com/a")
+			if hasSummary != tt.wantSummary {
+				t.Fatalf("stderr summary present = %t, want %t; stderr: %q", hasSummary, tt.wantSummary, stderr.String())
+			}
+		})
 	}
 }
 
