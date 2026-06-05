@@ -81,32 +81,42 @@ func formatAnswerText(answer *Answer) string {
 	if answer == nil {
 		return ""
 	}
+	if answer.AnswerText == "" && len(answer.References) == 0 {
+		return ""
+	}
 
 	var sb strings.Builder
-	sb.WriteString(answer.AnswerText)
-	if !strings.HasSuffix(answer.AnswerText, "\n") {
-		sb.WriteByte('\n')
+	if answer.AnswerText != "" {
+		sb.WriteString(answer.AnswerText)
+		if !strings.HasSuffix(answer.AnswerText, "\n") {
+			sb.WriteByte('\n')
+		}
 	}
 
 	if len(answer.References) == 0 {
 		return sb.String()
 	}
 
-	sb.WriteString("\nReferences:\n")
-	for i := range answer.References {
-		ref := &answer.References[i]
+	if sb.Len() > 0 {
+		sb.WriteByte('\n')
+	}
+	sb.WriteString("References:\n")
+	for i, ref := range answer.References {
 		if ref.DocumentReference == nil || ref.DocumentReference.DocumentChunk == nil {
 			fmt.Fprintf(&sb, "[%d] unknown reference\n", i+1)
 			continue
 		}
 		chunk := ref.DocumentReference.DocumentChunk
 		title := chunk.Parent
-		uri := ""
+		var uri string
 		if chunk.Document != nil {
 			if chunk.Document.Title != "" {
 				title = chunk.Document.Title
 			}
 			uri = chunk.Document.URI
+		}
+		if title == "" {
+			title = "Untitled"
 		}
 		if uri != "" {
 			fmt.Fprintf(&sb, "[%d] %s - %s\n", i+1, title, uri)

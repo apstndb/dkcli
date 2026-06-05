@@ -167,3 +167,23 @@ func TestFormatAnswerTextNil(t *testing.T) {
 		t.Fatalf("formatAnswerText(nil) = %q, want empty", got)
 	}
 }
+
+func TestFormatAnswerTextEmpty(t *testing.T) {
+	if got := formatAnswerText(&Answer{}); got != "" {
+		t.Fatalf("formatAnswerText(empty) = %q, want empty", got)
+	}
+}
+
+func TestFormatAnswerTextReferenceFallback(t *testing.T) {
+	got := formatAnswerText(&Answer{
+		References: []AnswerReference{{
+			DocumentReference: &DocumentReference{
+				DocumentChunk: &DocumentChunk{},
+			},
+		}},
+	})
+	want := "References:\n[1] Untitled\n"
+	if got != want {
+		t.Fatalf("formatAnswerText(reference only) = %q, want %q", got, want)
+	}
+}
