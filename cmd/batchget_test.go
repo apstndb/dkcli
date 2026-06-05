@@ -277,6 +277,7 @@ func captureStderr(t *testing.T, fn func() error) string {
 	t.Helper()
 
 	origStderr := os.Stderr
+	t.Cleanup(func() { os.Stderr = origStderr })
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -287,7 +288,6 @@ func captureStderr(t *testing.T, fn func() error) string {
 		t.Fatal(closeErr)
 	}
 	os.Stderr = origStderr
-	t.Cleanup(func() { os.Stderr = origStderr })
 
 	data, readErr := io.ReadAll(r)
 	if readErr != nil {
