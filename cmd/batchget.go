@@ -348,7 +348,7 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		}
 		defer closer()
 		outputErr = printBatchOutput(w, docs, outputFormat, batchFrontmatter)
-		if outputErr == nil {
+		if outputErr == nil && outputFormat == "text" {
 			printDocsSummary(docs)
 		}
 	}
