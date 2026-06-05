@@ -1,6 +1,6 @@
 # dkcli
 
-CLI client for the [Google Developer Knowledge API](https://developerknowledge.googleapis.com/).
+CLI client for the [Google Developer Knowledge API](https://developers.google.com/knowledge/api).
 
 ## Install
 
