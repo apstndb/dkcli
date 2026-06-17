@@ -1,7 +1,7 @@
 cloud.google.com/go/compute/metadata v0.3.0 h1:Tz+eQXMEqDIKRsmY3cHTL6FVaynIjX2QxYC4trgAKZc=
 cloud.google.com/go/compute/metadata v0.3.0/go.mod h1:zFmK7XCadkQkj6TtorcaGlCW1hT1fIilQDwofLpJ20k=
-github.com/apstndb/developerknowledge-go v0.1.1 h1:5sL7fPVV464Q1to31DdZQCnG4SAIESYRs7+m1J9zUqY=
-github.com/apstndb/developerknowledge-go v0.1.1/go.mod h1:SkrYUXrudPdwg//GnGSnLsjYilMI+9n2+TGUuHo/CcE=
+github.com/apstndb/developerknowledge-go v0.1.2 h1:ejpPuozEUEl6W7kCAeK3N9OzwfZEqSuTABckOSsNA9A=
+github.com/apstndb/developerknowledge-go v0.1.2/go.mod h1:SkrYUXrudPdwg//GnGSnLsjYilMI+9n2+TGUuHo/CcE=
 github.com/cpuguy83/go-md2man/v2 v2.0.4/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
 github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
