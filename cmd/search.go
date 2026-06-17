@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 )
 
@@ -38,12 +39,7 @@ func init() {
 }
 
 // DocumentChunk represents a search result chunk.
-type DocumentChunk struct {
-	Parent   string    `json:"parent" yaml:"parent"`
-	ID       string    `json:"id" yaml:"id"`
-	Content  string    `json:"content" yaml:"content"`
-	Document *Document `json:"document,omitempty" yaml:"document,omitempty"`
-}
+type DocumentChunk = dkapi.DocumentChunk
 
 type searchResponse struct {
 	Results       []DocumentChunk `json:"results" yaml:"results"`

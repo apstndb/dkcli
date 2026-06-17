@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -35,29 +34,21 @@ func init() {
 	rootCmd.AddCommand(batchGetCmd)
 }
 
-type batchGetResponse struct {
-	Documents []Document `json:"documents" yaml:"documents"`
-}
+type batchGetResponse = dkapi.BatchGetResponse
 
 // fetchBatchGet makes a single batchGet API call for the given document names.
 func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
-	params := url.Values{}
-	for _, name := range names {
-		params.Add("names", name)
+	client := &dkapi.Client{
+		BaseURL:       c.baseURL,
+		APIKey:        c.apiKey,
+		HTTPClient:    c.client,
+		Context:       c.requestContext(),
+		Limiter:       c.limiter,
+		Verbose:       c.verbose,
+		VerboseWriter: os.Stderr,
+		MaxRetries:    3,
 	}
-
-	reqURL := c.baseURL + "/documents:batchGet?" + params.Encode()
-
-	body, err := c.doGet(reqURL)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp batchGetResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Documents, nil
+	return client.BatchGetDocuments(names)
 }
 
 // isBisectable reports whether the error is document-specific enough to
@@ -69,18 +60,7 @@ func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
 // batch-level request/configuration errors are not rewritten into per-document
 // failures.
 func isBisectable(err error) bool {
-	var ae *apiError
-	if !errors.As(err, &ae) {
-		return false
-	}
-	if ae.Code < 400 || ae.Code >= 500 {
-		return false
-	}
-	switch ae.Status {
-	case "INVALID_ARGUMENT", "NOT_FOUND":
-		return true
-	}
-	return false
+	return dkapi.IsBisectableDocumentError(err)
 }
 
 // fetchBatchBisect fetches documents, bisecting on bisectable errors to
