@@ -150,7 +150,7 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 		Limiter:       c.limiter,
 		Verbose:       c.verbose,
 		VerboseWriter: os.Stderr,
-		MaxRetries:    3,
+		MaxRetries:    2,
 	}
 	return dkClient.DoAPIRequest(method, url, body, contentType)
 }

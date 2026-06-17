@@ -46,7 +46,7 @@ func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
 		Limiter:       c.limiter,
 		Verbose:       c.verbose,
 		VerboseWriter: os.Stderr,
-		MaxRetries:    3,
+		MaxRetries:    2,
 	}
 	return client.BatchGetDocuments(names)
 }
