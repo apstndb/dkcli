@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 )
 
@@ -221,7 +222,7 @@ func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url stri
 	if err != nil {
 		return nil, err
 	}
-	return checkResponse(resp)
+	return dkapi.CheckResponse(resp)
 }
 
 func runCreateAPIKey(cmd *cobra.Command, args []string) error {
@@ -267,7 +268,7 @@ func runCreateAPIKey(cmd *cobra.Command, args []string) error {
 	}
 
 	for !op.Done {
-		if err := sleepContext(opCtx, createAPIKeyPollInterval); err != nil {
+		if err := dkapi.SleepContext(opCtx, createAPIKeyPollInterval); err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
 				return apiKeyOperationTimeoutError(op.Name)
 			}

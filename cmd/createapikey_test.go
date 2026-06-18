@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 )
@@ -110,34 +111,6 @@ func TestExtractAPITargets(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestQuotaProjectTransport(t *testing.T) {
-	t.Parallel()
-
-	var gotHeader string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotHeader = r.Header.Get("x-goog-user-project")
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(srv.Close)
-
-	client := &http.Client{
-		Transport: &quotaProjectTransport{
-			Base:    http.DefaultTransport,
-			Project: "my-project",
-		},
-	}
-
-	resp, err := client.Get(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-
-	if gotHeader != "my-project" {
-		t.Errorf("x-goog-user-project = %q, want %q", gotHeader, "my-project")
 	}
 }
 
@@ -267,8 +240,8 @@ func TestNewAPIKeysClient_LeavesClientTimeoutUnset(t *testing.T) {
 
 	orig := defaultTokenSource
 	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-		if len(scopes) != 1 || scopes[0] != cloudPlatformScope {
-			t.Fatalf("scopes = %v, want [%q]", scopes, cloudPlatformScope)
+		if len(scopes) != 1 || scopes[0] != dkapi.CloudPlatformScope {
+			t.Fatalf("scopes = %v, want [%q]", scopes, dkapi.CloudPlatformScope)
 		}
 		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
 	}

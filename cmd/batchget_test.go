@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
 )
@@ -193,9 +194,9 @@ func TestFetchBatchGet_APIError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	var ae *apiError
+	var ae *dkapi.APIError
 	if !errors.As(err, &ae) {
-		t.Fatalf("expected *apiError, got %T: %v", err, err)
+		t.Fatalf("expected *dkapi.APIError, got %T: %v", err, err)
 	}
 	if ae.Code != 400 {
 		t.Errorf("error code = %d, want 400", ae.Code)
@@ -367,9 +368,9 @@ func TestFetchBatchBisect_AuthErrorsAreFatal(t *testing.T) {
 			if fatal == nil {
 				t.Fatal("expected fatal error, got nil")
 			}
-			var ae *apiError
+			var ae *dkapi.APIError
 			if !errors.As(fatal, &ae) {
-				t.Fatalf("expected *apiError, got %T: %v", fatal, fatal)
+				t.Fatalf("expected *dkapi.APIError, got %T: %v", fatal, fatal)
 			}
 			if ae.Code != tt.code {
 				t.Fatalf("fatal code = %d, want %d", ae.Code, tt.code)
@@ -395,9 +396,9 @@ func TestFetchBatchBisect_PlainHTTP404IsFatal(t *testing.T) {
 	if fatal == nil {
 		t.Fatal("expected fatal error, got nil")
 	}
-	var ae *apiError
+	var ae *dkapi.APIError
 	if !errors.As(fatal, &ae) {
-		t.Fatalf("expected *apiError, got %T: %v", fatal, fatal)
+		t.Fatalf("expected *dkapi.APIError, got %T: %v", fatal, fatal)
 	}
 	if ae.Code != http.StatusNotFound {
 		t.Fatalf("fatal code = %d, want %d", ae.Code, http.StatusNotFound)
@@ -428,7 +429,7 @@ func TestIsBisectable_ServerErrorsStayFatal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := &apiError{Code: tt.code, Status: tt.status}
+			err := &dkapi.APIError{Code: tt.code, Status: tt.status}
 			if isBisectable(err) {
 				t.Fatalf("isBisectable(%+v) = true, want false", err)
 			}

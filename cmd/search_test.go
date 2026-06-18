@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+
+	dkapi "github.com/apstndb/developerknowledge-go"
 )
 
 func TestFetchSearchPage(t *testing.T) {
@@ -117,9 +119,9 @@ func TestFetchSearchPage_APIError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	var ae *apiError
+	var ae *dkapi.APIError
 	if !errors.As(err, &ae) {
-		t.Fatalf("expected *apiError, got %T: %v", err, err)
+		t.Fatalf("expected *dkapi.APIError, got %T: %v", err, err)
 	}
 	if ae.Code != 400 {
 		t.Errorf("code = %d, want 400", ae.Code)

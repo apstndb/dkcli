@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"golang.org/x/oauth2"
 	"golang.org/x/time/rate"
 	"gopkg.in/yaml.v3"
@@ -59,8 +60,8 @@ func TestNewAPIClient_FallsBackToADC(t *testing.T) {
 
 	orig := defaultTokenSource
 	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-		if len(scopes) != 1 || scopes[0] != cloudPlatformScope {
-			t.Fatalf("scopes = %v, want [%q]", scopes, cloudPlatformScope)
+		if len(scopes) != 1 || scopes[0] != dkapi.CloudPlatformScope {
+			t.Fatalf("scopes = %v, want [%q]", scopes, dkapi.CloudPlatformScope)
 		}
 		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
 	}
@@ -110,83 +111,6 @@ func TestNewAPIClient_SetsQuotaProjectHeader(t *testing.T) {
 	resp.Body.Close()
 	if gotQuota != "quota-project" {
 		t.Fatalf("x-goog-user-project = %q, want %q", gotQuota, "quota-project")
-	}
-}
-
-func TestResolveQuotaProjectID(t *testing.T) {
-	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "quota-project")
-	got, _ := resolveQuotaProjectID()
-	if got != "quota-project" {
-		t.Fatalf("got %q, want %q", got, "quota-project")
-	}
-}
-
-func TestResolveQuotaProjectIDFromADCFile(t *testing.T) {
-	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "")
-
-	dir := t.TempDir()
-	path := filepath.Join(dir, "adc.json")
-	data, err := json.Marshal(map[string]string{"quota_project_id": "from-file"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	orig := adcCredentialsPath
-	adcCredentialsPath = func() string { return path }
-	t.Cleanup(func() { adcCredentialsPath = orig })
-
-	got, _ := resolveQuotaProjectID()
-	if got != "from-file" {
-		t.Fatalf("got %q, want %q", got, "from-file")
-	}
-}
-
-func TestDefaultADCCredentialsPath(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		goos    string
-		homeDir string
-		appData string
-		want    string
-	}{
-		{
-			name:    "darwin uses xdg-compatible gcloud path",
-			goos:    "darwin",
-			homeDir: "/Users/alice",
-			want:    filepath.Join("/Users/alice", ".config", "gcloud", "application_default_credentials.json"),
-		},
-		{
-			name:    "linux uses xdg-compatible gcloud path",
-			goos:    "linux",
-			homeDir: "/home/alice",
-			want:    filepath.Join("/home/alice", ".config", "gcloud", "application_default_credentials.json"),
-		},
-		{
-			name:    "windows uses APPDATA",
-			goos:    "windows",
-			appData: filepath.Join("C:", "Users", "alice", "AppData", "Roaming"),
-			want:    filepath.Join("C:", "Users", "alice", "AppData", "Roaming", "gcloud", "application_default_credentials.json"),
-		},
-		{
-			name: "windows without APPDATA returns empty",
-			goos: "windows",
-			want: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := defaultADCCredentialsPath(tt.goos, tt.homeDir, tt.appData)
-			if got != tt.want {
-				t.Fatalf("defaultADCCredentialsPath(%q, %q, %q) = %q, want %q", tt.goos, tt.homeDir, tt.appData, got, tt.want)
-			}
-		})
 	}
 }
 

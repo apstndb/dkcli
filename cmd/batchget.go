@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -35,52 +34,24 @@ func init() {
 	rootCmd.AddCommand(batchGetCmd)
 }
 
-type batchGetResponse struct {
-	Documents []Document `json:"documents" yaml:"documents"`
-}
+type batchGetResponse = dkapi.BatchGetResponse
 
 // fetchBatchGet makes a single batchGet API call for the given document names.
 func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
-	params := url.Values{}
-	for _, name := range names {
-		params.Add("names", name)
-	}
-
-	reqURL := c.baseURL + "/documents:batchGet?" + params.Encode()
-
-	body, err := c.doGet(reqURL)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp batchGetResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Documents, nil
+	return c.newDKClient().BatchGetDocuments(names)
 }
 
 // isBisectable reports whether the error is document-specific enough to
 // narrow down by bisecting the request into smaller batches.
 // Network errors, auth/permission failures, 5xx, and rate-limit exhaustion
 // are not bisectable.
-// Note: 429 is returned as *rateLimitError by checkResponse, not *apiError.
+// Note: 429 is returned as *dkapi.RateLimitError by dkapi.CheckResponse, not
+// *dkapi.APIError.
 // Keep this as a conservative allow-list: unknown 4xx responses stay fatal so
 // batch-level request/configuration errors are not rewritten into per-document
 // failures.
 func isBisectable(err error) bool {
-	var ae *apiError
-	if !errors.As(err, &ae) {
-		return false
-	}
-	if ae.Code < 400 || ae.Code >= 500 {
-		return false
-	}
-	switch ae.Status {
-	case "INVALID_ARGUMENT", "NOT_FOUND":
-		return true
-	}
-	return false
+	return dkapi.IsBisectableDocumentError(err)
 }
 
 // fetchBatchBisect fetches documents, bisecting on bisectable errors to
