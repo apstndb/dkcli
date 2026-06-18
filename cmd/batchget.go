@@ -38,17 +38,7 @@ type batchGetResponse = dkapi.BatchGetResponse
 
 // fetchBatchGet makes a single batchGet API call for the given document names.
 func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
-	client := &dkapi.Client{
-		BaseURL:       c.baseURL,
-		APIKey:        c.apiKey,
-		HTTPClient:    c.client,
-		Context:       c.requestContext(),
-		Limiter:       c.limiter,
-		Verbose:       c.verbose,
-		VerboseWriter: os.Stderr,
-		MaxRetries:    2,
-	}
-	return client.BatchGetDocuments(names)
+	return c.newDKClient().BatchGetDocuments(names)
 }
 
 // isBisectable reports whether the error is document-specific enough to

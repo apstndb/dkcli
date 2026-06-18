@@ -34,11 +34,11 @@ var (
 
 const defaultHTTPTimeout = dkapi.DefaultHTTPTimeout
 
-type authMode int
+type authMode = dkapi.AuthMode
 
 const (
-	authPreferAPIKey authMode = iota
-	authRequireADC
+	authPreferAPIKey = dkapi.AuthPreferAPIKey
+	authRequireADC   = dkapi.AuthRequireADC
 )
 
 var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
@@ -81,7 +81,7 @@ func apiKeyFromEnv() string {
 
 func newADCHTTPClient(ctx context.Context, mode authMode, timeout time.Duration) (*http.Client, error) {
 	return dkapi.NewADCHTTPClient(ctx, dkapi.AuthConfig{
-		Mode:            dkapi.AuthMode(mode),
+		Mode:            mode,
 		Timeout:         timeout,
 		TokenSource:     defaultTokenSource,
 		CredentialsPath: adcCredentialsPath,
@@ -116,8 +116,9 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 // Document represents a Developer Knowledge API document.
 type Document = dkapi.Document
 
-func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType string) ([]byte, error) {
-	dkClient := &dkapi.Client{
+func (c *apiClient) newDKClient() *dkapi.Client {
+	return &dkapi.Client{
+		BaseURL:       c.baseURL,
 		APIKey:        c.apiKey,
 		HTTPClient:    c.client,
 		Context:       c.requestContext(),
@@ -126,7 +127,10 @@ func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType st
 		VerboseWriter: os.Stderr,
 		MaxRetries:    2,
 	}
-	return dkClient.DoAPIRequest(method, url, body, contentType)
+}
+
+func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType string) ([]byte, error) {
+	return c.newDKClient().DoAPIRequest(method, url, body, contentType)
 }
 
 func (c *apiClient) requestContext() context.Context {
