@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apstndb/developerknowledge-go"
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 )
 

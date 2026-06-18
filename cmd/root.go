@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apstndb/developerknowledge-go"
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
 	"golang.org/x/time/rate"
@@ -32,7 +32,6 @@ var (
 	answerQueryBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
 )
 
-const cloudPlatformScope = dkapi.CloudPlatformScope
 const defaultHTTPTimeout = dkapi.DefaultHTTPTimeout
 
 type authMode int
@@ -46,13 +45,7 @@ var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.Tok
 	return dkapi.DefaultTokenSource(ctx, scopes...)
 }
 
-type adcCredentialsMetadata = dkapi.ADCCredentialsMetadata
-
 var adcCredentialsPath = dkapi.DefaultCredentialsPath
-
-func defaultADCCredentialsPath(goos, homeDir, appData string) string {
-	return dkapi.DefaultADCCredentialsPath(goos, homeDir, appData)
-}
 
 var rootCmd = &cobra.Command{
 	Use:   "dkcli",
@@ -123,25 +116,6 @@ func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
 // Document represents a Developer Knowledge API document.
 type Document = dkapi.Document
 
-// apiError represents a non-OK HTTP response from the API.
-type apiError = dkapi.APIError
-
-// rateLimitError is returned when the API responds with HTTP 429.
-type rateLimitError = dkapi.RateLimitError
-
-// parseRetryAfter extracts the Retry-After header value as a duration.
-// Returns 0 if the header is absent or unparseable.
-func parseRetryAfter(resp *http.Response) time.Duration {
-	return dkapi.ParseRetryAfter(resp)
-}
-
-// checkResponse reads the response body, closes it, and returns the body bytes.
-// If the status code is not 200, it attempts to parse a Google API error JSON
-// and returns a descriptive error. HTTP 429 returns a *rateLimitError.
-func checkResponse(resp *http.Response) ([]byte, error) {
-	return dkapi.CheckResponse(resp)
-}
-
 func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType string) ([]byte, error) {
 	dkClient := &dkapi.Client{
 		APIKey:        c.apiKey,
@@ -162,10 +136,6 @@ func (c *apiClient) requestContext() context.Context {
 	return context.Background()
 }
 
-func sleepContext(ctx context.Context, wait time.Duration) error {
-	return dkapi.SleepContext(ctx, wait)
-}
-
 func (c *apiClient) doGet(url string) ([]byte, error) {
 	return c.doAPIRequest(http.MethodGet, url, nil, "")
 }
@@ -177,16 +147,6 @@ func (c *apiClient) doJSONPost(url string, body []byte) ([]byte, error) {
 func normalizeDocName(name string) string {
 	return dkapi.NormalizeDocName(name)
 }
-
-func loadADCCredentialsMetadata() adcCredentialsMetadata {
-	return dkapi.LoadADCCredentialsMetadata(adcCredentialsPath)
-}
-
-func resolveQuotaProjectID() (string, adcCredentialsMetadata) {
-	return dkapi.ResolveQuotaProjectID(adcCredentialsPath)
-}
-
-type quotaProjectTransport = dkapi.QuotaProjectTransport
 
 // outWriter returns the writer for command output.
 // If file is non-empty, it opens the file and returns it with a closer.

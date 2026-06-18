@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/apstndb/developerknowledge-go"
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -55,7 +55,8 @@ func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
 // narrow down by bisecting the request into smaller batches.
 // Network errors, auth/permission failures, 5xx, and rate-limit exhaustion
 // are not bisectable.
-// Note: 429 is returned as *rateLimitError by checkResponse, not *apiError.
+// Note: 429 is returned as *dkapi.RateLimitError by dkapi.CheckResponse, not
+// *dkapi.APIError.
 // Keep this as a conservative allow-list: unknown 4xx responses stay fatal so
 // batch-level request/configuration errors are not rewritten into per-document
 // failures.
