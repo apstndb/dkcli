@@ -121,7 +121,6 @@ func (c *apiClient) newDKClient() *dkapi.Client {
 		BaseURL:       c.baseURL,
 		APIKey:        c.apiKey,
 		HTTPClient:    c.client,
-		Context:       c.requestContext(),
 		Limiter:       c.limiter,
 		Verbose:       c.verbose,
 		VerboseWriter: os.Stderr,
@@ -130,7 +129,7 @@ func (c *apiClient) newDKClient() *dkapi.Client {
 }
 
 func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType string) ([]byte, error) {
-	return c.newDKClient().DoAPIRequest(method, url, body, contentType)
+	return c.newDKClient().DoAPIRequest(c.requestContext(), method, url, body, contentType)
 }
 
 func (c *apiClient) requestContext() context.Context {
