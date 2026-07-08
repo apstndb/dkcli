@@ -3,10 +3,12 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -25,6 +27,8 @@ var (
 	outputFile   string
 	verbose      bool
 )
+
+var version = "dev"
 
 var (
 	searchBaseURL = "https://developerknowledge.googleapis.com/v1"
@@ -48,12 +52,20 @@ var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.Tok
 var adcCredentialsPath = dkapi.DefaultCredentialsPath
 
 var rootCmd = &cobra.Command{
-	Use:   "dkcli",
-	Short: "CLI client for Google Developer Knowledge API",
+	Use:     "dkcli",
+	Short:   "CLI client for Google Developer Knowledge API",
+	Version: commandVersion(),
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		return validateOutputFormat(outputFormat)
+	},
 }
 
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	ExecuteContext(context.Background())
+}
+
+func ExecuteContext(ctx context.Context) {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		os.Exit(1)
 	}
 }
@@ -63,6 +75,26 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "write output to file")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "dump response headers to stderr")
 	rootCmd.SilenceUsage = true
+}
+
+func commandVersion() string {
+	if version != "" && version != "dev" {
+		return version
+	}
+	info, ok := debug.ReadBuildInfo()
+	if ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
+}
+
+func validateOutputFormat(format string) error {
+	switch format {
+	case "text", "json", "jsonl", "yaml", "txtar":
+		return nil
+	default:
+		return fmt.Errorf("unknown format: %s", format)
+	}
 }
 
 // apiClient holds the configuration for making API requests.
@@ -121,7 +153,6 @@ func (c *apiClient) newDKClient() *dkapi.Client {
 		BaseURL:       c.baseURL,
 		APIKey:        c.apiKey,
 		HTTPClient:    c.client,
-		Context:       c.requestContext(),
 		Limiter:       c.limiter,
 		Verbose:       c.verbose,
 		VerboseWriter: os.Stderr,
@@ -130,7 +161,7 @@ func (c *apiClient) newDKClient() *dkapi.Client {
 }
 
 func (c *apiClient) doAPIRequest(method, url string, body []byte, contentType string) ([]byte, error) {
-	return c.newDKClient().DoAPIRequest(method, url, body, contentType)
+	return c.newDKClient().DoAPIRequest(c.requestContext(), method, url, body, contentType)
 }
 
 func (c *apiClient) requestContext() context.Context {
@@ -155,15 +186,26 @@ func normalizeDocName(name string) string {
 // outWriter returns the writer for command output.
 // If file is non-empty, it opens the file and returns it with a closer.
 // Otherwise it returns stdout.
-func outWriter(file string) (io.Writer, func(), error) {
+func outWriter(file string) (io.Writer, func() error, error) {
 	if file == "" {
-		return os.Stdout, func() {}, nil
+		return os.Stdout, func() error { return nil }, nil
 	}
 	f, err := os.Create(file)
 	if err != nil {
 		return nil, nil, err
 	}
-	return f, func() { f.Close() }, nil
+	return f, f.Close, nil
+}
+
+func finishOutput(writeErr error, close func() error) error {
+	closeErr := close()
+	if writeErr != nil {
+		if closeErr != nil {
+			return errors.Join(writeErr, closeErr)
+		}
+		return writeErr
+	}
+	return closeErr
 }
 
 // writeFormatted encodes v in the given format to w.

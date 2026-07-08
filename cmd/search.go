@@ -26,7 +26,10 @@ var searchCmd = &cobra.Command{
 	Use:   "search <query>...",
 	Short: "Search developer documentation chunks",
 	Args:  cobra.MinimumNArgs(1),
-	RunE:  runSearch,
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return validateSearchFlags(pageSize, maxPages)
+	},
+	RunE: runSearch,
 }
 
 func init() {
@@ -117,6 +120,16 @@ func (c *apiClient) fetchSearchPage(query string, size int, token, filter string
 	return &resp, nil
 }
 
+func validateSearchFlags(size, pages int) error {
+	if size < 0 || size > 20 {
+		return fmt.Errorf("--page-size must be between 0 and 20")
+	}
+	if pages < 0 {
+		return fmt.Errorf("--max-pages must be greater than or equal to 0")
+	}
+	return nil
+}
+
 func runSearch(cmd *cobra.Command, args []string) error {
 	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
 	if err != nil {
@@ -134,10 +147,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closer()
 
 	if outputFormat == "jsonl" {
-		return runSearchJSONL(w, client, query)
+		return finishOutput(runSearchJSONL(w, client, query), closer)
 	}
 
 	var allResults searchResponse
@@ -148,7 +160,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	for {
 		resp, err := client.fetchSearchPage(query, pageSize, token, searchFilter)
 		if err != nil {
-			return err
+			return finishOutput(err, closer)
 		}
 		pages++
 
@@ -202,7 +214,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			sb.WriteByte('\n')
 		}
 		_, err := fmt.Fprint(w, sb.String())
-		return err
+		return finishOutput(err, closer)
 	case "txtar":
 		var sb strings.Builder
 		for _, chunk := range allResults.Results {
@@ -210,8 +222,8 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			sb.WriteString(txtarEntry(name, chunk.Content))
 		}
 		_, err := fmt.Fprint(w, sb.String())
-		return err
+		return finishOutput(err, closer)
 	default:
-		return writeFormatted(w, outputFormat, allResults)
+		return finishOutput(writeFormatted(w, outputFormat, allResults), closer)
 	}
 }

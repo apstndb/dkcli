@@ -68,9 +68,32 @@ func TestDocFilePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.docName+"_"+tt.format, func(t *testing.T) {
 			t.Parallel()
-			got := docFilePath(tt.dir, tt.docName, tt.format)
+			got, err := docFilePath(tt.dir, tt.docName, tt.format)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if got != tt.want {
 				t.Errorf("docFilePath(%q, %q, %q) = %q, want %q", tt.dir, tt.docName, tt.format, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDocFilePathRejectsEscapes(t *testing.T) {
+	t.Parallel()
+	tests := []string{
+		"",
+		"documents/",
+		"documents/../../outside",
+		"../outside",
+		"/absolute/path",
+	}
+
+	for _, docName := range tests {
+		t.Run(docName, func(t *testing.T) {
+			t.Parallel()
+			if got, err := docFilePath(t.TempDir(), docName, "text"); err == nil {
+				t.Fatalf("docFilePath(%q) = %q, nil; want error", docName, got)
 			}
 		})
 	}
@@ -452,7 +475,10 @@ func TestWriteBatchOutdir(t *testing.T) {
 	}
 
 	for _, doc := range docs {
-		path := docFilePath(dir, doc.Name, "text")
+		path, err := docFilePath(dir, doc.Name, "text")
+		if err != nil {
+			t.Fatal(err)
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("failed to read %s: %v", path, err)
@@ -476,7 +502,10 @@ func TestWriteBatchOutdir_JSONFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path := docFilePath(dir, docs[0].Name, "json")
+	path, err := docFilePath(dir, docs[0].Name, "json")
+	if err != nil {
+		t.Fatal(err)
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("failed to read %s: %v", path, err)

@@ -38,7 +38,7 @@ type batchGetResponse = dkapi.BatchGetResponse
 
 // fetchBatchGet makes a single batchGet API call for the given document names.
 func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
-	return c.newDKClient().BatchGetDocuments(names)
+	return c.newDKClient().BatchGetDocuments(c.requestContext(), names)
 }
 
 // isBisectable reports whether the error is document-specific enough to
@@ -111,9 +111,16 @@ func formatExtension(format string) string {
 
 // docFilePath builds the output file path by stripping the "documents/" prefix
 // from the document name and appending the format extension under outDir.
-func docFilePath(outDir, docName, format string) string {
+func docFilePath(outDir, docName, format string) (string, error) {
 	name := strings.TrimPrefix(docName, "documents/")
-	return filepath.Join(outDir, name+formatExtension(format))
+	if name == "" {
+		return "", fmt.Errorf("invalid document name %q", docName)
+	}
+	rel := filepath.FromSlash(name + formatExtension(format))
+	if !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("document name %q escapes output directory", docName)
+	}
+	return filepath.Join(outDir, rel), nil
 }
 
 // formatDocForFile formats a single document for file output.
@@ -165,7 +172,11 @@ func writeBatchOutdir(docs []Document, dir, format string, frontmatter bool) err
 	var writeErrs []error
 	for i := range docs {
 		doc := &docs[i]
-		path := docFilePath(dir, doc.Name, format)
+		path, err := docFilePath(dir, doc.Name, format)
+		if err != nil {
+			writeErrs = append(writeErrs, err)
+			continue
+		}
 
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			writeErrs = append(writeErrs, fmt.Errorf("%s: %w", path, err))
@@ -317,8 +328,8 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer closer()
 		outputErr = printBatchOutput(w, docs, outputFormat, batchFrontmatter)
+		outputErr = finishOutput(outputErr, closer)
 		if outputErr == nil && outputFormat == "text" {
 			printDocsSummary(cmd.ErrOrStderr(), docs)
 		}
