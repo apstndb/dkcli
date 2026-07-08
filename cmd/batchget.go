@@ -318,10 +318,10 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		outputErr = printBatchOutput(w, docs, outputFormat, batchFrontmatter)
+		outputErr = finishOutput(outputErr, closer)
 		if outputErr == nil && outputFormat == "text" {
 			printDocsSummary(cmd.ErrOrStderr(), docs)
 		}
-		outputErr = finishOutput(outputErr, closer)
 	}
 	if outputErr != nil {
 		return outputErr
