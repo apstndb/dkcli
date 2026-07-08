@@ -26,6 +26,46 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+func TestValidateOutputFormat(t *testing.T) {
+	for _, format := range []string{"text", "json", "jsonl", "yaml", "txtar"} {
+		t.Run(format, func(t *testing.T) {
+			if err := validateOutputFormat(format); err != nil {
+				t.Fatalf("validateOutputFormat(%q) = %v, want nil", format, err)
+			}
+		})
+	}
+
+	err := validateOutputFormat("xml")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown format: xml") {
+		t.Fatalf("error = %q, want unknown format message", err)
+	}
+}
+
+func TestFinishOutputReturnsCloseError(t *testing.T) {
+	closeErr := errors.New("close failed")
+
+	err := finishOutput(nil, func() error { return closeErr })
+	if !errors.Is(err, closeErr) {
+		t.Fatalf("finishOutput(nil, closeErr) = %v, want closeErr", err)
+	}
+}
+
+func TestFinishOutputJoinsWriteAndCloseErrors(t *testing.T) {
+	writeErr := errors.New("write failed")
+	closeErr := errors.New("close failed")
+
+	err := finishOutput(writeErr, func() error { return closeErr })
+	if !errors.Is(err, writeErr) {
+		t.Fatalf("finishOutput error = %v, want writeErr", err)
+	}
+	if !errors.Is(err, closeErr) {
+		t.Fatalf("finishOutput error = %v, want closeErr", err)
+	}
+}
+
 func TestNewAPIClient_PrefersAPIKey(t *testing.T) {
 	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "api-key")
 

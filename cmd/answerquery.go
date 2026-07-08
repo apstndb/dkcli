@@ -143,16 +143,15 @@ func runAnswerQuery(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closer()
 
 	switch outputFormat {
 	case "text":
 		_, err = fmt.Fprint(w, formatAnswerText(&resp.Answer))
-		return err
+		return finishOutput(err, closer)
 	case "txtar":
 		_, err = fmt.Fprint(w, txtarEntry("answer.txt", formatAnswerText(&resp.Answer)))
-		return err
+		return finishOutput(err, closer)
 	default:
-		return writeFormatted(w, outputFormat, resp)
+		return finishOutput(writeFormatted(w, outputFormat, resp), closer)
 	}
 }

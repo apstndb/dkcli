@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -83,10 +83,10 @@ func formatDocText(doc *Document) string {
 
 func runGet(cmd *cobra.Command, args []string) error {
 	if frontmatter && sizeOnly {
-		return fmt.Errorf(getFrontmatterSizeOnlyError)
+		return errors.New(getFrontmatterSizeOnlyError)
 	}
 	if frontmatter && outputFormat != "text" {
-		return fmt.Errorf(getFrontmatterTextFormatError)
+		return errors.New(getFrontmatterTextFormatError)
 	}
 
 	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
@@ -117,26 +117,25 @@ func runGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer closer()
 
 	if frontmatter {
 		s, err := formatDocWithFrontmatter(&doc)
 		if err != nil {
-			return err
+			return finishOutput(err, closer)
 		}
-		_, err = fmt.Fprint(w, s)
-		return err
+		_, err = w.Write([]byte(s))
+		return finishOutput(err, closer)
 	}
 
 	switch outputFormat {
 	case "text":
-		_, err := fmt.Fprint(w, formatDocText(&doc))
-		return err
+		_, err := w.Write([]byte(formatDocText(&doc)))
+		return finishOutput(err, closer)
 	case "txtar":
-		_, err := fmt.Fprint(w, txtarEntry(doc.Name, doc.Content))
-		return err
+		_, err := w.Write([]byte(txtarEntry(doc.Name, doc.Content)))
+		return finishOutput(err, closer)
 	default:
-		return writeFormatted(w, outputFormat, doc)
+		return finishOutput(writeFormatted(w, outputFormat, doc), closer)
 	}
 }
 

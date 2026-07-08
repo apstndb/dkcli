@@ -1,7 +1,16 @@
 package main
 
-import "github.com/apstndb/dkcli/cmd"
+import (
+	"context"
+	"os"
+	"os/signal"
+
+	"github.com/apstndb/dkcli/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	cmd.ExecuteContext(ctx)
 }
