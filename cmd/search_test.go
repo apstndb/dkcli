@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	dkapi "github.com/apstndb/developerknowledge-go"
@@ -125,5 +126,40 @@ func TestFetchSearchPage_APIError(t *testing.T) {
 	}
 	if ae.Code != 400 {
 		t.Errorf("code = %d, want 400", ae.Code)
+	}
+}
+
+func TestValidateSearchFlags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		size    int
+		pages   int
+		wantErr string
+	}{
+		{name: "defaults", size: 0, pages: 5},
+		{name: "max_page_size", size: 20, pages: 0},
+		{name: "negative_page_size", size: -1, pages: 5, wantErr: "--page-size"},
+		{name: "too_large_page_size", size: 21, pages: 5, wantErr: "--page-size"},
+		{name: "negative_max_pages", size: 10, pages: -1, wantErr: "--max-pages"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSearchFlags(tt.size, tt.pages)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateSearchFlags(%d, %d) = %v, want nil", tt.size, tt.pages, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("validateSearchFlags(%d, %d) = nil, want error containing %q", tt.size, tt.pages, tt.wantErr)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err, tt.wantErr)
+			}
+		})
 	}
 }
