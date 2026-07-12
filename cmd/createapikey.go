@@ -46,9 +46,6 @@ For advanced restrictions (IP allowlists, HTTP referrers, etc.), use
   # Create and set in current shell
   export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p my-project --key-only)
 
-  # Persist in shell profile (review before sourcing)
-  echo "export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p my-project --key-only)" >> ~/.zshrc
-
   # View full key details as JSON
   dkcli create-api-key -p my-project -f json`,
 	RunE: runCreateAPIKey,
