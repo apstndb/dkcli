@@ -195,7 +195,7 @@ func newAPIKeysClient(ctx context.Context) (*http.Client, error) {
 	// Charge quota/billing to the configured ADC quota project, matching the
 	// rest of the CLI, rather than implicitly using the target project passed
 	// to --project.
-	return newADCHTTPClient(ctx, authRequireADC, 0)
+	return newADCHTTPClient(ctx, authRequireADC, 0, apiKeysBaseURL)
 }
 
 func doAPIKeysRequest(ctx context.Context, client *http.Client, method, url string, body []byte, contentType string) ([]byte, error) {

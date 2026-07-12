@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2"
 	"golang.org/x/time/rate"
 )
 
@@ -32,6 +34,32 @@ func TestNormalizeDocName(t *testing.T) {
 				t.Errorf("normalizeDocName(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRunGetRejectsInvalidDocumentNameBeforeAuthentication(t *testing.T) {
+	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+
+	origTokenSource := defaultTokenSource
+	called := false
+	defaultTokenSource = func(context.Context, ...string) (oauth2.TokenSource, error) {
+		called = true
+		return nil, errors.New("authentication should not run")
+	}
+	t.Cleanup(func() { defaultTokenSource = origTokenSource })
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	err := runGet(cmd, []string{"https://user:secret@example.com/document"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != "invalid document name" {
+		t.Fatalf("error = %q, want %q", err, "invalid document name")
+	}
+	if called {
+		t.Fatal("authentication ran for an invalid document name")
 	}
 }
 

@@ -14,7 +14,6 @@ import (
 
 	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
-	"golang.org/x/oauth2"
 	"golang.org/x/time/rate"
 	"gopkg.in/yaml.v3"
 )
@@ -31,7 +30,7 @@ var (
 var version = "dev"
 
 var (
-	searchBaseURL = "https://developerknowledge.googleapis.com/v1"
+	searchBaseURL = dkapi.DefaultV1BaseURL
 	// Workaround: answerQuery is still documented and served on v1alpha.
 	answerQueryBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
 )
@@ -45,11 +44,12 @@ const (
 	authRequireADC   = dkapi.AuthRequireADC
 )
 
-var defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-	return dkapi.DefaultTokenSource(ctx, scopes...)
-}
+// Nil defaults preserve dkapi's ADC discovery, including credentials-file
+// metadata such as quota_project_id and metadata-server fallback. Tests may
+// override either seam for deterministic authentication behavior.
+var defaultTokenSource dkapi.TokenSourceFunc
 
-var adcCredentialsPath = dkapi.DefaultCredentialsPath
+var adcCredentialsPath func() string
 
 var rootCmd = &cobra.Command{
 	Use:     "dkcli",
@@ -107,41 +107,46 @@ type apiClient struct {
 	verbose bool
 }
 
-func apiKeyFromEnv() string {
-	return dkapi.APIKeyFromEnv()
+func newADCHTTPClient(ctx context.Context, mode authMode, timeout time.Duration, baseURL string) (*http.Client, error) {
+	return dkapi.NewADCHTTPClient(ctx, authConfig(mode, timeout, baseURL))
 }
 
-func newADCHTTPClient(ctx context.Context, mode authMode, timeout time.Duration) (*http.Client, error) {
-	return dkapi.NewADCHTTPClient(ctx, dkapi.AuthConfig{
-		Mode:            mode,
-		Timeout:         timeout,
-		TokenSource:     defaultTokenSource,
-		CredentialsPath: adcCredentialsPath,
-	})
+func authConfig(mode authMode, timeout time.Duration, baseURL string) dkapi.AuthConfig {
+	cfg := dkapi.AuthConfig{
+		Mode:          mode,
+		Timeout:       timeout,
+		AllowedOrigin: baseURL,
+	}
+	if defaultTokenSource != nil {
+		cfg.TokenSource = defaultTokenSource
+	}
+	if adcCredentialsPath != nil {
+		cfg.CredentialsPath = adcCredentialsPath
+	}
+	return cfg
 }
 
 // newAPIClient creates an apiClient using the global defaults.
 func newAPIClient(ctx context.Context, mode authMode) (*apiClient, error) {
+	return newAPIClientForBaseURL(ctx, mode, searchBaseURL)
+}
+
+// newAPIClientForBaseURL creates an apiClient whose requests and authentication
+// origin guard use the same API base URL.
+func newAPIClientForBaseURL(ctx context.Context, mode authMode, baseURL string) (*apiClient, error) {
 	client := &apiClient{
-		baseURL: searchBaseURL,
+		baseURL: baseURL,
 		ctx:     ctx,
 		limiter: apiLimiter,
 		verbose: verbose,
 	}
 
-	if mode == authPreferAPIKey {
-		if apiKey := apiKeyFromEnv(); apiKey != "" {
-			client.apiKey = apiKey
-			client.client = &http.Client{Timeout: defaultHTTPTimeout}
-			return client, nil
-		}
-	}
-
-	var err error
-	client.client, err = newADCHTTPClient(ctx, mode, defaultHTTPTimeout)
+	httpClient, apiKey, err := dkapi.NewAuthenticatedHTTPClient(ctx, authConfig(mode, defaultHTTPTimeout, baseURL))
 	if err != nil {
 		return nil, err
 	}
+	client.apiKey = apiKey
+	client.client = httpClient
 	return client, nil
 }
 

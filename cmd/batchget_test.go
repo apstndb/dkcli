@@ -14,6 +14,7 @@ import (
 
 	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2"
 	"golang.org/x/time/rate"
 )
 
@@ -28,6 +29,32 @@ func newTestClient(t *testing.T, handler http.Handler) *apiClient {
 		client:  srv.Client(),
 		limiter: rate.NewLimiter(rate.Inf, 1),
 		verbose: false,
+	}
+}
+
+func TestRunBatchGetRejectsInvalidDocumentNameBeforeAuthentication(t *testing.T) {
+	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+
+	origTokenSource := defaultTokenSource
+	called := false
+	defaultTokenSource = func(context.Context, ...string) (oauth2.TokenSource, error) {
+		called = true
+		return nil, errors.New("authentication should not run")
+	}
+	t.Cleanup(func() { defaultTokenSource = origTokenSource })
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	err := runBatchGet(cmd, []string{"documents/example.com/good", "https://user:secret@example.com/document"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != "invalid document name at argument 2" {
+		t.Fatalf("error = %q, want invalid input without the raw URL", err)
+	}
+	if called {
+		t.Fatal("authentication ran for an invalid document name")
 	}
 }
 
@@ -301,16 +328,16 @@ func TestRunBatchGetPrintsSummaryOnlyForTextOutput(t *testing.T) {
 func TestFetchBatchBisect(t *testing.T) {
 	t.Parallel()
 
-	// Simulate: batch containing "bad" fails with 400, others succeed.
+	// Simulate: batch containing "bad" fails with 404, others succeed.
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		names := r.URL.Query()["names"]
 		for _, n := range names {
 			if n == "documents/bad" {
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
+				w.WriteHeader(http.StatusNotFound)
 				json.NewEncoder(w).Encode(map[string]any{
 					"error": map[string]any{
-						"code":    400,
+						"code":    404,
 						"message": "not found",
 						"status":  "NOT_FOUND",
 					},

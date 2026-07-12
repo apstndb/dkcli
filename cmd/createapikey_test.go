@@ -265,17 +265,20 @@ func TestNewAPIKeysClient_UsesResolvedQuotaProject(t *testing.T) {
 	}
 	t.Cleanup(func() { defaultTokenSource = orig })
 
-	client, err := newAPIKeysClient(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	var gotQuota string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuota = r.Header.Get("x-goog-user-project")
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(srv.Close)
+	origBaseURL := apiKeysBaseURL
+	apiKeysBaseURL = srv.URL
+	t.Cleanup(func() { apiKeysBaseURL = origBaseURL })
+
+	client, err := newAPIKeysClient(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	resp, err := client.Get(srv.URL)
 	if err != nil {
@@ -292,7 +295,13 @@ func TestNewAPIKeysClient_FailsWithoutQuotaProjectForUserADC(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "adc.json")
-	data, err := json.Marshal(map[string]string{"type": "authorized_user"})
+	data, err := json.Marshal(map[string]string{
+		"type":          "authorized_user",
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"refresh_token": "test-refresh-token",
+		"token_uri":     "https://oauth2.googleapis.com/token",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,9 +314,7 @@ func TestNewAPIKeysClient_FailsWithoutQuotaProjectForUserADC(t *testing.T) {
 	t.Cleanup(func() { adcCredentialsPath = origPath })
 
 	origTokenSource := defaultTokenSource
-	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
-	}
+	defaultTokenSource = nil
 	t.Cleanup(func() { defaultTokenSource = origTokenSource })
 
 	_, err = newAPIKeysClient(context.Background())

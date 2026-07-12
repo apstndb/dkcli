@@ -89,12 +89,15 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return errors.New(getFrontmatterTextFormatError)
 	}
 
+	name := normalizeDocName(args[0])
+	if name == "" {
+		return errors.New("invalid document name")
+	}
+
 	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
 	if err != nil {
 		return err
 	}
-
-	name := normalizeDocName(args[0])
 	body, err := client.fetchDocument(name)
 	if err != nil {
 		return err
