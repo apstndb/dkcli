@@ -130,7 +130,8 @@ wc -c /tmp/docs/**/*.md
 
 # Step 3: Read selectively based on size
 #   - Small files (< 20KB): read the full file
-#   - Large files (> 20KB): use head, grep, or targeted reads to extract relevant sections
+#   - Large files (> 20KB): use rg or targeted reads to locate relevant sections,
+#     then read each selected section with enough surrounding context
 ```
 
 This workflow prevents accidentally flooding context with very large documents. Some Google docs pages can be 50KB+ of Markdown — always check sizes first.
@@ -155,7 +156,33 @@ dkcli answer-query "How do I create a Cloud Storage bucket?"
 
 This command calls the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC if a quota project is available.
 
-**Caveat:** The `answer-query` endpoint returns generated text with citations and references to source document chunks, but it is still a preview endpoint and is currently limited to 50 requests per day per project. For authoritative or full-context verification, **prefer the `search` + `get` workflow**. Use `answer-query` when you need a quick grounded overview, then fetch referenced documents when accuracy matters.
+**Caveat:** The `answer-query` endpoint returns generated text with citations and references to source document chunks, but it is still a preview endpoint and is currently limited to 50 requests per day per project. For authoritative or full-context verification, **prefer the `search` + `get` workflow**. Use `answer-query` when you need a quick grounded overview, then fetch referenced documents before making or publishing a factual claim.
+
+### Evidence-grade research
+
+When documentation is being used to settle a compatibility question, support a
+bug report, or justify a code change, treat generated answers and search chunks as
+routing aids rather than final evidence:
+
+1. Fetch the full source document with `get` or `batch-get`.
+2. Read the relevant section with enough surrounding context to capture qualifiers,
+   optional clauses, and exceptions.
+3. Record the canonical document name or URL and the retrieval date in the working
+   notes. When available, also retain document metadata such as update time.
+4. Separate what the document states from conclusions inferred by the agent.
+5. If multiple official pages disagree, preserve the discrepancy instead of silently
+   choosing one.
+
+For structured provenance, retrieve JSON and retain only non-sensitive metadata plus
+the relevant content:
+
+```bash
+dkcli get -f json docs.cloud.google.com/path/to/doc \
+  | jq '{name, uri, title, updateTime, content}'
+```
+
+Field availability can vary by document and CLI version; inspect the JSON shape
+before relying on a metadata field.
 
 ## Combining with shell tools
 
@@ -168,8 +195,8 @@ dkcli batch-get -f json doc1 doc2 | jq '.documents[] | {name, preview: .content[
 # Extract just document names from search results
 dkcli search -f json "Cloud Storage" | jq '.results[].parent'
 
-# Stream search results as JSONL for line-by-line processing
-dkcli search -a -f jsonl "Pub/Sub" | jq -r '.content' | head -100
+# Search streamed content for a relevant term
+dkcli search -a -f jsonl "Pub/Sub" | jq -r '.content' | rg -n "ordering key"
 ```
 
 ## Output format
@@ -204,10 +231,11 @@ gcloud auth application-default set-quota-project <project-id>
 
 # Option 2: create an API key and set it in the current shell (requires ADC once)
 export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p <gcp-project-id> --key-only)
-
-# To persist, append to shell profile
-echo "export DEVELOPERKNOWLEDGE_API_KEY=$(dkcli create-api-key -p <gcp-project-id> --key-only)" >> ~/.zshrc
 ```
+
+Keep generated keys out of shell profiles, command transcripts, repository files,
+and agent output. Do not persist a key unless the user explicitly requests it and
+chooses an appropriate secret-storage mechanism. Prefer ADC when possible.
 
 If the user already has an API key and prefers to use it, they just need to set the environment variable:
 ```bash
