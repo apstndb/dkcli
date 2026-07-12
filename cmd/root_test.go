@@ -140,7 +140,7 @@ func TestNewAPIClient_SetsQuotaProjectHeader(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client, err := newAPIClient(context.Background(), authPreferAPIKey)
+	client, err := newAPIClientForBaseURL(context.Background(), authPreferAPIKey, srv.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,13 @@ func TestNewAPIClient_FailsFastWithoutQuotaProjectForUserADC(t *testing.T) {
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "adc.json")
-	data, err := json.Marshal(map[string]string{"type": "authorized_user"})
+	data, err := json.Marshal(map[string]string{
+		"type":          "authorized_user",
+		"client_id":     "test-client-id",
+		"client_secret": "test-client-secret",
+		"refresh_token": "test-refresh-token",
+		"token_uri":     "https://oauth2.googleapis.com/token",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,9 +180,7 @@ func TestNewAPIClient_FailsFastWithoutQuotaProjectForUserADC(t *testing.T) {
 	t.Cleanup(func() { adcCredentialsPath = origPath })
 
 	origTokenSource := defaultTokenSource
-	defaultTokenSource = func(ctx context.Context, scopes ...string) (oauth2.TokenSource, error) {
-		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-token"}), nil
-	}
+	defaultTokenSource = nil
 	t.Cleanup(func() { defaultTokenSource = origTokenSource })
 
 	_, err = newAPIClient(context.Background(), authPreferAPIKey)
@@ -188,12 +192,77 @@ func TestNewAPIClient_FailsFastWithoutQuotaProjectForUserADC(t *testing.T) {
 	}
 }
 
+func TestNewAPIClient_ADCFetchUsesQuotaProjectAndAllowedOrigin(t *testing.T) {
+	t.Setenv("DEVELOPERKNOWLEDGE_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("GOOGLE_CLOUD_QUOTA_PROJECT", "")
+
+	var tokenMethod, authorization, quotaProject string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			tokenMethod = r.Method
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"access_token":"test-token","token_type":"Bearer","expires_in":3600}`)
+		case "/v1/documents/example.com/page":
+			authorization = r.Header.Get("Authorization")
+			quotaProject = r.Header.Get("x-goog-user-project")
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	path := filepath.Join(t.TempDir(), "adc.json")
+	data, err := json.Marshal(map[string]string{
+		"type":             "authorized_user",
+		"client_id":        "test-client-id",
+		"client_secret":    "test-client-secret",
+		"refresh_token":    "test-refresh-token",
+		"token_uri":        srv.URL + "/token",
+		"quota_project_id": "quota-project",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	origPath := adcCredentialsPath
+	adcCredentialsPath = func() string { return path }
+	t.Cleanup(func() { adcCredentialsPath = origPath })
+
+	origTokenSource := defaultTokenSource
+	defaultTokenSource = nil
+	t.Cleanup(func() { defaultTokenSource = origTokenSource })
+
+	client, err := newAPIClientForBaseURL(context.Background(), authPreferAPIKey, srv.URL+"/v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.fetchDocument("documents/example.com/page"); err != nil {
+		t.Fatal(err)
+	}
+	if tokenMethod != http.MethodPost {
+		t.Fatalf("token request method = %s, want POST", tokenMethod)
+	}
+	if authorization != "Bearer test-token" {
+		t.Fatalf("authorization = %q, want bearer token", authorization)
+	}
+	if quotaProject != "quota-project" {
+		t.Fatalf("x-goog-user-project = %q, want %q", quotaProject, "quota-project")
+	}
+}
+
 func TestAPIClient_DoRequestHonorsCanceledContextWhileWaiting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	called := false
 	client := &apiClient{
+		baseURL: "https://example.com",
 		client: &http.Client{
 			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 				called = true
@@ -223,6 +292,7 @@ func TestAPIClient_DoRequestUsesRequestContext(t *testing.T) {
 
 	done := make(chan error, 1)
 	client := &apiClient{
+		baseURL: "https://example.com",
 		client: &http.Client{
 			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 				<-req.Context().Done()
@@ -256,6 +326,7 @@ func TestAPIClient_DoRequestCancelsRetryBackoff(t *testing.T) {
 
 	attempts := 0
 	client := &apiClient{
+		baseURL: "https://example.com",
 		client: &http.Client{
 			Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 				attempts++

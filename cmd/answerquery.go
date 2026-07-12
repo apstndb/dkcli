@@ -128,11 +128,10 @@ func formatAnswerText(answer *Answer) string {
 }
 
 func runAnswerQuery(cmd *cobra.Command, args []string) error {
-	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
+	client, err := newAPIClientForBaseURL(cmd.Context(), authPreferAPIKey, answerQueryBaseURL)
 	if err != nil {
 		return err
 	}
-	client.baseURL = answerQueryBaseURL
 
 	resp, err := client.answerQuery(strings.Join(args, " "))
 	if err != nil {

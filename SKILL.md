@@ -111,6 +111,8 @@ The document name is the URL path without `https://`. Full URLs also work:
 dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
 ```
 
+Invalid URL-like document names are rejected locally before authentication or an API request.
+
 ### When you already know the document
 
 If you can reasonably guess the URL of the documentation page (e.g., the user gave you a link, or you know the path pattern), skip search and go straight to `dkcli get` (or `dkcli batch-get` for multiple pages). This saves a round trip.

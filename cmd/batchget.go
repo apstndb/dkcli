@@ -13,8 +13,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const batchGetMaxDocs = 20
-
 var (
 	outDir           string
 	batchFrontmatter bool
@@ -280,6 +278,9 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 	names := make([]string, len(args))
 	for i, arg := range args {
 		names[i] = normalizeDocName(arg)
+		if names[i] == "" {
+			return fmt.Errorf("invalid document name at argument %d", i+1)
+		}
 	}
 
 	client, err := newAPIClient(cmd.Context(), authPreferAPIKey)
@@ -289,11 +290,11 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 
 	var docs []Document
 	var docErrs []error
-	for i := 0; i < len(names); i += batchGetMaxDocs {
-		end := min(i+batchGetMaxDocs, len(names))
+	for i := 0; i < len(names); i += dkapi.MaxBatchGetDocuments {
+		end := min(i+dkapi.MaxBatchGetDocuments, len(names))
 		chunk := names[i:end]
 
-		if verbose && len(names) > batchGetMaxDocs {
+		if verbose && len(names) > dkapi.MaxBatchGetDocuments {
 			fmt.Fprintf(os.Stderr, "Fetching chunk %d-%d of %d documents...\n", i+1, end, len(names))
 		}
 

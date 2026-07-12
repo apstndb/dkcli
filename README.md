@@ -54,6 +54,7 @@ dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
 ```
 
 If you already know the document URL, skip `search` and go straight to `get` or `batch-get`.
+Invalid URL-like document names are rejected locally before authentication or an API request.
 
 ### Get multiple documents
 
