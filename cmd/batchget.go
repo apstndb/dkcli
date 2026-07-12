@@ -110,6 +110,14 @@ func formatExtension(format string) string {
 // docFilePath builds the output file path by stripping the "documents/" prefix
 // from the document name and appending the format extension under outDir.
 func docFilePath(outDir, docName, format string) (string, error) {
+	rel, err := docFileRelativePath(docName, format)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(outDir, rel), nil
+}
+
+func docFileRelativePath(docName, format string) (string, error) {
 	name := strings.TrimPrefix(docName, "documents/")
 	if name == "" {
 		return "", fmt.Errorf("invalid document name %q", docName)
@@ -118,7 +126,7 @@ func docFilePath(outDir, docName, format string) (string, error) {
 	if !filepath.IsLocal(rel) {
 		return "", fmt.Errorf("document name %q escapes output directory", docName)
 	}
-	return filepath.Join(outDir, rel), nil
+	return rel, nil
 }
 
 // formatDocForFile formats a single document for file output.
@@ -168,15 +176,23 @@ func writeBatchOutdir(docs []Document, dir, format string, frontmatter bool) err
 	}
 	var stats []fileStat
 	var writeErrs []error
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create output directory %s: %w", dir, err)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return fmt.Errorf("open output directory %s: %w", dir, err)
+	}
 	for i := range docs {
 		doc := &docs[i]
-		path, err := docFilePath(dir, doc.Name, format)
+		rel, err := docFileRelativePath(doc.Name, format)
 		if err != nil {
 			writeErrs = append(writeErrs, err)
 			continue
 		}
+		path := filepath.Join(dir, rel)
 
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := root.MkdirAll(filepath.Dir(rel), 0o755); err != nil {
 			writeErrs = append(writeErrs, fmt.Errorf("%s: %w", path, err))
 			continue
 		}
@@ -187,13 +203,16 @@ func writeBatchOutdir(docs []Document, dir, format string, frontmatter bool) err
 			continue
 		}
 
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if err := root.WriteFile(rel, data, 0o644); err != nil {
 			writeErrs = append(writeErrs, fmt.Errorf("%s: %w", path, err))
 			continue
 		}
 
 		lines := strings.Count(string(data), "\n")
 		stats = append(stats, fileStat{name: doc.Name, path: path, bytes: len(data), lines: lines})
+	}
+	if err := root.Close(); err != nil {
+		writeErrs = append(writeErrs, fmt.Errorf("close output directory %s: %w", dir, err))
 	}
 
 	// Print summary.

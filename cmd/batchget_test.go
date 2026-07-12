@@ -549,3 +549,42 @@ func TestWriteBatchOutdir_JSONFormat(t *testing.T) {
 		t.Errorf("content = %q, want %q", parsed.Content, "Hello")
 	}
 }
+
+func TestWriteBatchOutdirRejectsSymlinkEscape(t *testing.T) {
+	t.Parallel()
+
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "output")
+	outside := filepath.Join(parent, "outside")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "example.com")); err != nil {
+		t.Skipf("symlinks are unavailable: %v", err)
+	}
+
+	docs := []Document{
+		{Name: "documents/example.com/escaped", Content: "must stay contained"},
+		{Name: "documents/safe.example/page", Content: "safe output"},
+	}
+	if err := writeBatchOutdir(docs, dir, "text", false); err == nil {
+		t.Fatal("writeBatchOutdir() error = nil, want symlink escape rejection")
+	}
+
+	escapedPath := filepath.Join(outside, "escaped.md")
+	if _, err := os.Stat(escapedPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("outside file %s exists or could not be checked: %v", escapedPath, err)
+	}
+
+	safePath := filepath.Join(dir, "safe.example", "page.md")
+	data, err := os.ReadFile(safePath)
+	if err != nil {
+		t.Fatalf("safe document was not written after rejected escape: %v", err)
+	}
+	if got, want := string(data), "safe output\n"; got != want {
+		t.Fatalf("safe document content = %q, want %q", got, want)
+	}
+}
