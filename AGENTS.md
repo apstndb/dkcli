@@ -15,7 +15,7 @@
 - `cmd/root.go` centralizes shared HTTP behavior: global output flags, auth selection, rate limiting, retries, and structured output helpers.
 - `search` targets the GA `v1` REST surface.
 - `get` and `batch-get` target the GA `v1` REST surface.
-- `answer-query` currently uses `v1alpha` because that is the documented live endpoint.
+- `answer-query` targets the GA `v1:answerQuery` endpoint.
 - `create-api-key` uses ADC against the API Keys API, then fetches the key string from the follow-up endpoint.
 - Tests live beside the command code in `cmd/` and mostly use `httptest`; `newTestClient` in `cmd/batchget_test.go` is the shared fixture for document API tests.
 

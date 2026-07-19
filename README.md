@@ -10,7 +10,9 @@ go install github.com/apstndb/dkcli@latest
 
 ## Authentication
 
-Developer Knowledge API commands use Application Default Credentials (ADC) by default, except `create-api-key` which always requires ADC.
+Developer Knowledge API commands use `DEVELOPERKNOWLEDGE_API_KEY` or
+`GOOGLE_API_KEY` when set, and otherwise fall back to Application Default
+Credentials (ADC). The `create-api-key` command always requires ADC.
 
 Set up ADC:
 
@@ -20,7 +22,7 @@ gcloud auth application-default login
 
 When using local ADC, the Developer Knowledge API also requires a quota project. dkcli reads that from `GOOGLE_CLOUD_QUOTA_PROJECT` or `quota_project_id` in the ADC file. The standard way to set that up is `gcloud auth application-default set-quota-project <project-id>`.
 
-If you prefer to use an API key instead of ADC, set one of the following environment variables:
+To use an API key, set one of the following environment variables:
 
 ```
 export DEVELOPERKNOWLEDGE_API_KEY=<your-key>
@@ -58,6 +60,9 @@ Invalid URL-like document names are rejected locally before authentication or an
 
 ### Get multiple documents
 
+The live API accepts up to 20 document names per batch request. `batch-get`
+automatically chunks larger input lists into multiple requests.
+
 ```
 dkcli batch-get docs.cloud.google.com/path/to/doc1 docs.cloud.google.com/path/to/doc2
 
@@ -82,7 +87,8 @@ dkcli create-api-key
 
 ### Answer a grounded query
 
-Uses the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC if a quota project is available.
+Uses the GA `v1:answerQuery` endpoint. It works with an API key, or with ADC if
+a quota project is available.
 
 ```
 dkcli answer-query "How do I create a Cloud Storage bucket?"
@@ -92,9 +98,7 @@ The text output prints the generated answer followed by source references when
 the API returns them. Structured formats include the full `answer` payload,
 including citation spans and referenced document chunks.
 
-**Note:** This endpoint is a preview surface and is currently limited to 50
-requests per day per project. For full-document verification, prefer the
-`search` + `get` workflow.
+For full-document verification, prefer the `search` + `get` workflow.
 
 ## Global flags
 
@@ -110,7 +114,7 @@ requests per day per project. For full-document verification, prefer the
 
 | Flag | Description |
 |------|-------------|
-| `--page-size` | Max results to return (max: 20, default is set by the API) |
+| `--page-size` | Max results to return (max: 100, default is set by the API) |
 | `--page-token` | Pagination token from previous response |
 | `--auto-paging`, `-a` | Automatically fetch subsequent pages |
 | `--max-pages` | Max pages to fetch with `--auto-paging` (default: 5, 0 for unlimited) |

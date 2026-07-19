@@ -22,6 +22,8 @@ var (
 	searchFilter string
 )
 
+const maxSearchPageSize = 100
+
 var searchCmd = &cobra.Command{
 	Use:   "search <query>...",
 	Short: "Search developer documentation chunks",
@@ -33,7 +35,7 @@ var searchCmd = &cobra.Command{
 }
 
 func init() {
-	searchCmd.Flags().IntVar(&pageSize, "page-size", 0, "max results to return (max: 20, default is set by the API)")
+	searchCmd.Flags().IntVar(&pageSize, "page-size", 0, "max results to return (max: 100, default is set by the API)")
 	searchCmd.Flags().StringVar(&pageToken, "page-token", "", "pagination token from previous response")
 	searchCmd.Flags().BoolVarP(&autoPaging, "auto-paging", "a", false, "automatically fetch subsequent pages")
 	searchCmd.Flags().IntVar(&maxPages, "max-pages", 5, "max pages to fetch with --auto-paging (0 for unlimited)")
@@ -121,8 +123,8 @@ func (c *apiClient) fetchSearchPage(query string, size int, token, filter string
 }
 
 func validateSearchFlags(size, pages int) error {
-	if size < 0 || size > 20 {
-		return fmt.Errorf("--page-size must be between 0 and 20")
+	if size < 0 || size > maxSearchPageSize {
+		return fmt.Errorf("--page-size must be between 0 and %d", maxSearchPageSize)
 	}
 	if pages < 0 {
 		return fmt.Errorf("--max-pages must be greater than or equal to 0")
@@ -138,7 +140,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	// When auto-paging, default to max page size to minimize requests.
 	if autoPaging && !cmd.Flags().Changed("page-size") {
-		pageSize = 20
+		pageSize = maxSearchPageSize
 	}
 
 	query := strings.Join(args, " ")
