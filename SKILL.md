@@ -92,7 +92,7 @@ dkcli search --filter 'data_source = "docs.cloud.google.com"' "BigQuery"
 
 Once you know the document name(s) from search results, retrieve the full page(s).
 When search returns multiple relevant results, use `batch-get` to fetch them all.
-The API limits each call to 20 documents; `batch-get` automatically chunks larger
+The live API limits each call to 20 documents; `batch-get` automatically chunks larger
 lists into multiple calls:
 
 ```bash
@@ -105,7 +105,9 @@ If you only need a single document, `get` works the same way:
 dkcli get docs.cloud.google.com/storage/docs/creating-buckets
 ```
 
-The document name is the URL path without `https://`. Full URLs also work:
+The normalized document name includes the URL host and path without the scheme
+(for example, `docs.cloud.google.com/storage/docs/creating-buckets`). Full URLs
+also work:
 
 ```bash
 dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
@@ -154,9 +156,14 @@ For a quick generated answer instead of raw document content, use:
 dkcli answer-query "How do I create a Cloud Storage bucket?"
 ```
 
-This command calls the `v1alpha:answerQuery` endpoint. It works with an API key, or with ADC if a quota project is available.
+This command calls the GA `v1:answerQuery` endpoint. It works with an API key,
+or with ADC if a quota project is available.
 
-**Caveat:** The `answer-query` endpoint returns generated text with citations and references to source document chunks, but it is still a preview endpoint and is currently limited to 50 requests per day per project. For authoritative or full-context verification, **prefer the `search` + `get` workflow**. Use `answer-query` when you need a quick grounded overview, then fetch referenced documents before making or publishing a factual claim.
+**Caveat:** The `answer-query` endpoint returns generated text with citations
+and references to source document chunks. For authoritative or full-context
+verification, **prefer the `search` + `get` workflow**. Use `answer-query` when
+you need a quick grounded overview, then fetch referenced documents before
+making or publishing a factual claim.
 
 ### Evidence-grade research
 
@@ -218,11 +225,15 @@ dkcli batch-get -f txtar docs.cloud.google.com/doc1 docs.cloud.google.com/doc2  
 
 ## Error handling
 
-Developer Knowledge API commands use Application Default Credentials (ADC) by default, except `create-api-key` which always requires ADC. If an API key environment variable is set (`DEVELOPERKNOWLEDGE_API_KEY` or `GOOGLE_API_KEY`), dkcli uses it instead of ADC.
+Developer Knowledge API commands use an API key when
+`DEVELOPERKNOWLEDGE_API_KEY` or `GOOGLE_API_KEY` is set; otherwise dkcli falls
+back to Application Default Credentials (ADC). The `create-api-key` command
+always requires ADC.
 
 When using local ADC, the Developer Knowledge API also requires a quota project. dkcli resolves that from `GOOGLE_CLOUD_QUOTA_PROJECT` or `quota_project_id` in the ADC file. The standard way to set that up is `gcloud auth application-default set-quota-project <project-id>`.
 
-If dkcli fails because ADC is not available, suggest:
+If neither API key environment variable is set and dkcli fails because ADC is
+not available, suggest:
 
 ```bash
 # Option 1: set up ADC (recommended)
@@ -242,7 +253,7 @@ If the user already has an API key and prefers to use it, they just need to set 
 export DEVELOPERKNOWLEDGE_API_KEY=<key>
 ```
 
-Note: `get` and `batch-get` use the GA `v1` document endpoints. `answer-query` still uses `v1alpha:answerQuery`.
+Note: `get`, `batch-get`, and `answer-query` use GA `v1` endpoints.
 
 ## Command reference
 
@@ -259,7 +270,7 @@ Note: `get` and `batch-get` use the GA `v1` document endpoints. `answer-query` s
 |---|---|
 | `-f json\|yaml\|jsonl\|txtar` | Output format (default: text) |
 | `-o <file>` | Write to file |
-| `--page-size N` | Results per page for search (max 20) |
+| `--page-size N` | Results per page for search (max 100) |
 | `--max-pages N` | Max pages with `-a` (default 5) |
 | `--filter <expr>` | Filter search results by document metadata |
 | `--outdir <dir>` | Write each doc to separate files (batch-get) |

@@ -13,10 +13,9 @@ var answerQueryCmd = &cobra.Command{
 	Short: "Answer a query using grounded generation",
 	Long: `Answer a query using the Developer Knowledge grounded generation API.
 
-This endpoint is currently exposed as v1alpha and returns generated text with
-citations and references to source document chunks. Text output prints the
-answer followed by source references; structured output includes the full
-answer payload.
+This GA endpoint returns generated text with citations and references to source
+document chunks. Text output prints the answer followed by source references;
+structured output includes the full answer payload.
 
 If an API key is configured, dkcli uses it. Otherwise it falls back to ADC.`,
 	Args: cobra.MinimumNArgs(1),

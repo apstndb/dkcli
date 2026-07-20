@@ -17,7 +17,7 @@ import (
 
 func TestAnswerQuery(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1alpha:answerQuery" {
+		if r.URL.Path != "/v1:answerQuery" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -59,7 +59,7 @@ func TestAnswerQuery(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	client := &apiClient{
-		baseURL: srv.URL + "/v1alpha",
+		baseURL: srv.URL + "/v1",
 		client:  srv.Client(),
 		limiter: rate.NewLimiter(rate.Inf, 1),
 	}
@@ -91,7 +91,7 @@ func TestAnswerQuery(t *testing.T) {
 
 func TestRunAnswerQueryTextIncludesReferences(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1alpha:answerQuery" {
+		if r.URL.Path != "/v1:answerQuery" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -129,7 +129,7 @@ func TestRunAnswerQueryTextIncludesReferences(t *testing.T) {
 		outputFile = origOutputFile
 	})
 
-	answerQueryBaseURL = srv.URL + "/v1alpha"
+	answerQueryBaseURL = srv.URL + "/v1"
 	apiLimiter = rate.NewLimiter(rate.Inf, 1)
 	outputFormat = "text"
 	outputFile = filepath.Join(t.TempDir(), "answer.txt")

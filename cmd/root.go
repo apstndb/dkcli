@@ -30,9 +30,8 @@ var (
 var version = "dev"
 
 var (
-	searchBaseURL = dkapi.DefaultV1BaseURL
-	// Workaround: answerQuery is still documented and served on v1alpha.
-	answerQueryBaseURL = "https://developerknowledge.googleapis.com/v1alpha"
+	searchBaseURL      = dkapi.DefaultV1BaseURL
+	answerQueryBaseURL = dkapi.DefaultV1BaseURL
 )
 
 const defaultHTTPTimeout = dkapi.DefaultHTTPTimeout

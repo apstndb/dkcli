@@ -139,9 +139,10 @@ func TestValidateSearchFlags(t *testing.T) {
 		wantErr string
 	}{
 		{name: "defaults", size: 0, pages: 5},
-		{name: "max_page_size", size: 20, pages: 0},
+		{name: "max_page_size", size: 100, pages: 0},
+		{name: "previous_page_size_limit", size: 21, pages: 5},
 		{name: "negative_page_size", size: -1, pages: 5, wantErr: "--page-size"},
-		{name: "too_large_page_size", size: 21, pages: 5, wantErr: "--page-size"},
+		{name: "too_large_page_size", size: 101, pages: 5, wantErr: "--page-size"},
 		{name: "negative_max_pages", size: 10, pages: -1, wantErr: "--max-pages"},
 	}
 
