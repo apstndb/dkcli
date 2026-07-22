@@ -3,7 +3,7 @@ module github.com/apstndb/dkcli
 go 1.25.0
 
 require (
-	github.com/apstndb/developerknowledge-go v0.3.0
+	github.com/apstndb/developerknowledge-go v0.3.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/time v0.15.0
