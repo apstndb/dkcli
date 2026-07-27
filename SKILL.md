@@ -115,6 +115,20 @@ dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
 
 Invalid URL-like document names are rejected locally before authentication or an API request.
 
+### Check metadata or size without downloading content
+
+`--view basic` (get and batch-get) returns document metadata only. It still
+reports `content_length_bytes` and `update_time`, so use it to check a
+document's size or freshness cheaply instead of fetching the whole page:
+
+```bash
+dkcli get --view basic -f yaml docs.cloud.google.com/storage/docs/creating-buckets
+dkcli batch-get --view basic --size-only docs.cloud.google.com/doc1 docs.cloud.google.com/doc2
+```
+
+Summary lines say `metadata only` because line counts need the content. Use the
+default view (or `--view content`) when you need the document body.
+
 ### When you already know the document
 
 If you can reasonably guess the URL of the documentation page (e.g., the user gave you a link, or you know the path pattern), skip search and go straight to `dkcli get` (or `dkcli batch-get` for multiple pages). This saves a round trip.
@@ -274,5 +288,6 @@ Note: `get`, `batch-get`, and `answer-query` use GA `v1` endpoints.
 | `--max-pages N` | Max pages with `-a` (default 5) |
 | `--filter <expr>` | Filter search results by document metadata |
 | `--outdir <dir>` | Write each doc to separate files (batch-get) |
+| `--view basic\|full\|content` | Document view for get/batch-get; `basic` returns metadata only (no content) |
 | `--frontmatter` | Prepend YAML frontmatter to `--format=text` output (get, batch-get; `get` does not support it with `--size-only`) |
 | `--key-only` | Print only the API key string (create-api-key) |

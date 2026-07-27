@@ -188,7 +188,7 @@ func TestFormatDocForFile(t *testing.T) {
 	})
 }
 
-func TestFetchBatchGet(t *testing.T) {
+func TestFetchBatchDocuments(t *testing.T) {
 	t.Parallel()
 
 	docs := []Document{
@@ -211,9 +211,12 @@ func TestFetchBatchGet(t *testing.T) {
 		resp := batchGetResponse{Documents: docs}
 		json.NewEncoder(w).Encode(resp)
 	}))
-	got, err := client.fetchBatchGet([]string{"documents/example.com/a", "documents/example.com/b"})
-	if err != nil {
-		t.Fatal(err)
+	got, docErrs, fatal := client.fetchBatchDocuments([]string{"documents/example.com/a", "documents/example.com/b"})
+	if fatal != nil {
+		t.Fatal(fatal)
+	}
+	if len(docErrs) != 0 {
+		t.Fatalf("docErrs = %v, want none", docErrs)
 	}
 	if len(got) != 2 {
 		t.Fatalf("got %d documents, want 2", len(got))
@@ -226,7 +229,7 @@ func TestFetchBatchGet(t *testing.T) {
 	}
 }
 
-func TestFetchBatchGet_APIError(t *testing.T) {
+func TestFetchBatchDocuments_DocumentErrorIsPerDocument(t *testing.T) {
 	t.Parallel()
 
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -240,16 +243,26 @@ func TestFetchBatchGet_APIError(t *testing.T) {
 			},
 		})
 	}))
-	_, err := client.fetchBatchGet([]string{"bad-name"})
-	if err == nil {
-		t.Fatal("expected error, got nil")
+	// A bisectable 400 is attributed to the document, not returned as fatal.
+	docs, docErrs, fatal := client.fetchBatchDocuments([]string{"bad-name"})
+	if fatal != nil {
+		t.Fatalf("fatal = %v, want nil", fatal)
+	}
+	if len(docs) != 0 {
+		t.Fatalf("docs = %v, want none", docs)
+	}
+	if len(docErrs) != 1 {
+		t.Fatalf("got %d doc errors, want 1", len(docErrs))
 	}
 	var ae *dkapi.APIError
-	if !errors.As(err, &ae) {
-		t.Fatalf("expected *dkapi.APIError, got %T: %v", err, err)
+	if !errors.As(docErrs[0], &ae) {
+		t.Fatalf("expected *dkapi.APIError, got %T: %v", docErrs[0], docErrs[0])
 	}
 	if ae.Code != 400 {
 		t.Errorf("error code = %d, want 400", ae.Code)
+	}
+	if !strings.Contains(docErrs[0].Error(), "bad-name") {
+		t.Errorf("doc error = %q, want it to name the document", docErrs[0])
 	}
 }
 
@@ -325,7 +338,7 @@ func TestRunBatchGetPrintsSummaryOnlyForTextOutput(t *testing.T) {
 	}
 }
 
-func TestFetchBatchBisect(t *testing.T) {
+func TestFetchBatchDocuments_BisectsFailures(t *testing.T) {
 	t.Parallel()
 
 	// Simulate: batch containing "bad" fails with 404, others succeed.
@@ -351,7 +364,7 @@ func TestFetchBatchBisect(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(batchGetResponse{Documents: docs})
 	}))
-	docs, docErrs, fatal := client.fetchBatchBisect([]string{
+	docs, docErrs, fatal := client.fetchBatchDocuments([]string{
 		"documents/a", "documents/bad", "documents/b",
 	})
 	if fatal != nil {
@@ -368,13 +381,13 @@ func TestFetchBatchBisect(t *testing.T) {
 	}
 }
 
-func TestFetchBatchBisect_NonBisectable(t *testing.T) {
+func TestFetchBatchDocuments_NonBisectable(t *testing.T) {
 	t.Parallel()
 
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}))
-	docs, docErrs, fatal := client.fetchBatchBisect([]string{"documents/a"})
+	docs, docErrs, fatal := client.fetchBatchDocuments([]string{"documents/a"})
 	if fatal == nil {
 		t.Fatal("expected fatal error for 500")
 	}
@@ -386,7 +399,7 @@ func TestFetchBatchBisect_NonBisectable(t *testing.T) {
 	}
 }
 
-func TestFetchBatchBisect_AuthErrorsAreFatal(t *testing.T) {
+func TestFetchBatchDocuments_AuthErrorsAreFatal(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -414,7 +427,7 @@ func TestFetchBatchBisect_AuthErrorsAreFatal(t *testing.T) {
 				})
 			}))
 
-			docs, docErrs, fatal := client.fetchBatchBisect([]string{"documents/a", "documents/b"})
+			docs, docErrs, fatal := client.fetchBatchDocuments([]string{"documents/a", "documents/b"})
 			if fatal == nil {
 				t.Fatal("expected fatal error, got nil")
 			}
@@ -435,14 +448,14 @@ func TestFetchBatchBisect_AuthErrorsAreFatal(t *testing.T) {
 	}
 }
 
-func TestFetchBatchBisect_PlainHTTP404IsFatal(t *testing.T) {
+func TestFetchBatchDocuments_PlainHTTP404IsFatal(t *testing.T) {
 	t.Parallel()
 
 	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "404 page not found", http.StatusNotFound)
 	}))
 
-	docs, docErrs, fatal := client.fetchBatchBisect([]string{"documents/a", "documents/b"})
+	docs, docErrs, fatal := client.fetchBatchDocuments([]string{"documents/a", "documents/b"})
 	if fatal == nil {
 		t.Fatal("expected fatal error, got nil")
 	}
@@ -461,7 +474,7 @@ func TestFetchBatchBisect_PlainHTTP404IsFatal(t *testing.T) {
 	}
 }
 
-func TestIsBisectable_ServerErrorsStayFatal(t *testing.T) {
+func TestBisectableClassificationKeepsServerErrorsFatal(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -480,8 +493,8 @@ func TestIsBisectable_ServerErrorsStayFatal(t *testing.T) {
 			t.Parallel()
 
 			err := &dkapi.APIError{Code: tt.code, Status: tt.status}
-			if isBisectable(err) {
-				t.Fatalf("isBisectable(%+v) = true, want false", err)
+			if dkapi.IsBisectableDocumentError(err) {
+				t.Fatalf("IsBisectableDocumentError(%+v) = true, want false", err)
 			}
 		})
 	}
