@@ -1,3 +1,7 @@
 /dkcli
 dkcli-workspace/
 skills-lock.json
+
+# Local multi-module development (dkcli + developerknowledge-go)
+go.work
+go.work.sum

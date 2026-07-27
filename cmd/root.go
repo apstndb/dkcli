@@ -228,6 +228,68 @@ func writeFormatted(w io.Writer, format string, v any) error {
 	}
 }
 
+// parseDocumentView maps a --view flag value to the API enum. An empty value
+// leaves the view unset so the server default (full content) applies.
+func parseDocumentView(view string) (dkapi.DocumentView, error) {
+	switch strings.ToLower(strings.TrimSpace(view)) {
+	case "":
+		return "", nil
+	case "basic", "document_view_basic":
+		return dkapi.DocumentViewBasic, nil
+	case "full", "document_view_full":
+		return dkapi.DocumentViewFull, nil
+	case "content", "document_view_content":
+		return dkapi.DocumentViewContent, nil
+	default:
+		return "", fmt.Errorf("--view must be one of basic, full, content (got %q)", view)
+	}
+}
+
+// documentViewOptions converts a parsed view into request options. An unset
+// view sends no option so the server default applies.
+func documentViewOptions(view dkapi.DocumentView) []dkapi.DocumentOption {
+	if view == "" {
+		return nil
+	}
+	return []dkapi.DocumentOption{dkapi.WithDocumentView(view)}
+}
+
+// validateDocumentViewOutput rejects combinations where a metadata-only view
+// would render content output that is necessarily empty, such as writing files
+// under --outdir that contain no document body.
+func validateDocumentViewOutput(view dkapi.DocumentView, format string, sizeOnly, frontmatter bool) error {
+	if view != dkapi.DocumentViewBasic || sizeOnly || frontmatter {
+		return nil
+	}
+	if format == "text" || format == "txtar" {
+		return fmt.Errorf(
+			"--view basic returns metadata without content; use --size-only, --frontmatter, or --format json|yaml|jsonl",
+		)
+	}
+	return nil
+}
+
+// docHasContent reports whether the response carried document content. A
+// metadata-only view (--view basic) omits content while still reporting size.
+func docHasContent(doc *Document) bool {
+	if doc.Content != "" {
+		return true
+	}
+	if doc.View == string(dkapi.DocumentViewBasic) {
+		return false
+	}
+	return doc.ContentLengthBytes == 0
+}
+
+// docSizeBytes reports the content size, preferring the server-reported length
+// so metadata-only responses still have a size to show.
+func docSizeBytes(doc *Document) int64 {
+	if !docHasContent(doc) {
+		return doc.ContentLengthBytes
+	}
+	return int64(len(doc.Content))
+}
+
 func docContentLines(content string) int {
 	lines := strings.Count(content, "\n")
 	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
@@ -236,22 +298,37 @@ func docContentLines(content string) int {
 	return lines
 }
 
-// printDocSummary prints a one-line summary of a document to w.
+// printDocSummary prints a one-line summary of a document to w. Metadata-only
+// responses report the server-provided size and omit the line count, which
+// cannot be computed without content.
 func printDocSummary(w io.Writer, doc *Document) {
+	if !docHasContent(doc) {
+		fmt.Fprintf(w, "%s (%d bytes, metadata only)\n", doc.Name, doc.ContentLengthBytes)
+		return
+	}
 	fmt.Fprintf(w, "%s (%d bytes, %d lines)\n",
 		doc.Name, len(doc.Content), docContentLines(doc.Content))
 }
 
 // printDocsSummary prints a per-document summary plus a total line to w.
 func printDocsSummary(w io.Writer, docs []Document) {
-	totalBytes := 0
+	var totalBytes int64
 	totalLines := 0
+	metadataOnly := 0
 	for i := range docs {
 		printDocSummary(w, &docs[i])
-		totalBytes += len(docs[i].Content)
-		totalLines += docContentLines(docs[i].Content)
+		totalBytes += docSizeBytes(&docs[i])
+		if docHasContent(&docs[i]) {
+			totalLines += docContentLines(docs[i].Content)
+		} else {
+			metadataOnly++
+		}
 	}
 	if len(docs) > 1 {
+		if metadataOnly == len(docs) {
+			fmt.Fprintf(w, "total: %d documents, %d bytes, metadata only\n", len(docs), totalBytes)
+			return
+		}
 		fmt.Fprintf(w, "total: %d documents, %d bytes, %d lines\n", len(docs), totalBytes, totalLines)
 	}
 }

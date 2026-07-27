@@ -29,66 +29,41 @@ func init() {
 	batchGetCmd.Flags().StringVar(&outDir, "outdir", "", "write each document to a separate file under this directory")
 	batchGetCmd.Flags().BoolVar(&batchFrontmatter, "frontmatter", false, "prepend YAML frontmatter to content (text format only)")
 	batchGetCmd.Flags().BoolVar(&sizeOnly, "size-only", false, "print document sizes only, suppress content (API calls still occur)")
+	batchGetCmd.Flags().StringVar(&docView, "view", "", docViewFlagUsage)
 	rootCmd.AddCommand(batchGetCmd)
 }
 
 type batchGetResponse = dkapi.BatchGetResponse
 
-// fetchBatchGet makes a single batchGet API call for the given document names.
-func (c *apiClient) fetchBatchGet(names []string) ([]Document, error) {
-	return c.newDKClient().BatchGetDocuments(c.requestContext(), names)
-}
-
-// isBisectable reports whether the error is document-specific enough to
-// narrow down by bisecting the request into smaller batches.
-// Network errors, auth/permission failures, 5xx, and rate-limit exhaustion
-// are not bisectable.
-// Note: 429 is returned as *dkapi.RateLimitError by dkapi.CheckResponse, not
-// *dkapi.APIError.
-// Keep this as a conservative allow-list: unknown 4xx responses stay fatal so
-// batch-level request/configuration errors are not rewritten into per-document
-// failures.
-func isBisectable(err error) bool {
-	return dkapi.IsBisectableDocumentError(err)
-}
-
-// fetchBatchBisect fetches documents, bisecting on bisectable errors to
-// identify individual failures.
+// fetchBatchDocuments retrieves every name through the shared batch helper,
+// which chunks the input to the API limit and bisects failing chunks to
+// attribute document-specific errors.
 // Returns:
-//   - docs: successfully fetched documents
+//   - docs: successfully fetched documents, in input order
 //   - docErrs: per-document errors identified by bisection
-//   - fatal: non-bisectable error (network failure, 5xx, etc.)
-func (c *apiClient) fetchBatchBisect(names []string) ([]Document, []error, error) {
-	docs, err := c.fetchBatchGet(names)
-	if err == nil {
-		return docs, nil, nil
+//   - fatal: non-bisectable error (network failure, auth, 5xx, rate-limit
+//     exhaustion); document output is suppressed in that case
+//
+// The bisectable/fatal split is dkapi.IsBisectableDocumentError: a conservative
+// allow-list where unknown 4xx responses and 429 stay fatal so batch-level
+// request or configuration errors are not rewritten into per-document failures.
+func (c *apiClient) fetchBatchDocuments(names []string, opts ...dkapi.DocumentOption) ([]Document, []error, error) {
+	results, fatal := c.newDKClient().BatchGetDocumentsPartial(c.requestContext(), names, opts...)
+	if fatal != nil {
+		return nil, nil, fatal
 	}
 
-	if !isBisectable(err) {
-		return nil, nil, err
+	var docs []Document
+	var docErrs []error
+	for _, result := range results {
+		switch {
+		case result.Err != nil:
+			docErrs = append(docErrs, result.Err)
+		case result.Document != nil:
+			docs = append(docs, *result.Document)
+		}
 	}
-
-	// Single document: report the error with the document name.
-	if len(names) == 1 {
-		return nil, []error{fmt.Errorf("%s: %w", names[0], err)}, nil
-	}
-
-	if c.verbose {
-		fmt.Fprintf(os.Stderr, "Batch failed (%d documents), bisecting to identify failures...\n", len(names))
-	}
-
-	// Split and retry each half.
-	mid := len(names) / 2
-	leftDocs, leftErrs, leftFatal := c.fetchBatchBisect(names[:mid])
-	if leftFatal != nil {
-		return nil, nil, leftFatal
-	}
-	rightDocs, rightErrs, rightFatal := c.fetchBatchBisect(names[mid:])
-	if rightFatal != nil {
-		return leftDocs, nil, rightFatal
-	}
-
-	return append(leftDocs, rightDocs...), append(leftErrs, rightErrs...), nil
+	return docs, docErrs, nil
 }
 
 // formatExtension returns the file extension for the given output format.
@@ -294,6 +269,15 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--frontmatter can only be used with text format")
 	}
 
+	view, err := parseDocumentView(docView)
+	if err != nil {
+		return err
+	}
+	if err := validateDocumentViewOutput(view, outputFormat, sizeOnly, batchFrontmatter); err != nil {
+		return err
+	}
+	opts := documentViewOptions(view)
+
 	names := make([]string, len(args))
 	for i, arg := range args {
 		names[i] = normalizeDocName(arg)
@@ -307,22 +291,13 @@ func runBatchGet(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var docs []Document
-	var docErrs []error
-	for i := 0; i < len(names); i += dkapi.MaxBatchGetDocuments {
-		end := min(i+dkapi.MaxBatchGetDocuments, len(names))
-		chunk := names[i:end]
+	if verbose && len(names) > dkapi.MaxBatchGetDocuments {
+		fmt.Fprintf(os.Stderr, "Fetching %d documents in chunks of %d...\n", len(names), dkapi.MaxBatchGetDocuments)
+	}
 
-		if verbose && len(names) > dkapi.MaxBatchGetDocuments {
-			fmt.Fprintf(os.Stderr, "Fetching chunk %d-%d of %d documents...\n", i+1, end, len(names))
-		}
-
-		d, e, fatal := client.fetchBatchBisect(chunk)
-		if fatal != nil {
-			return fatal
-		}
-		docs = append(docs, d...)
-		docErrs = append(docErrs, e...)
+	docs, docErrs, fatal := client.fetchBatchDocuments(names, opts...)
+	if fatal != nil {
+		return fatal
 	}
 
 	// All documents failed.

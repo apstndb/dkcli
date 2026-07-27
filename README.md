@@ -58,6 +58,15 @@ dkcli get https://docs.cloud.google.com/storage/docs/creating-buckets
 If you already know the document URL, skip `search` and go straight to `get` or `batch-get`.
 Invalid URL-like document names are rejected locally before authentication or an API request.
 
+To inspect metadata without downloading content, request the basic view. It
+reports `content_length_bytes` and `update_time`, so size and freshness checks
+transfer a fraction of the full document:
+
+```
+dkcli get --view basic -f yaml docs.cloud.google.com/storage/docs/creating-buckets
+dkcli get --view basic --size-only docs.cloud.google.com/storage/docs/creating-buckets
+```
+
 ### Get multiple documents
 
 The live API accepts up to 20 document names per batch request. `batch-get`
@@ -126,6 +135,7 @@ For full-document verification, prefer the `search` + `get` workflow.
 |------|-------------|
 | `--frontmatter` | Prepend YAML frontmatter to content (`--format=text` only; incompatible with `--size-only`) |
 | `--size-only` | Print document size only, suppress content |
+| `--view` | Document view: `basic` (metadata only, no content), `full`, or `content` (default is set by the API) |
 
 ### `batch-get`
 
@@ -134,6 +144,7 @@ For full-document verification, prefer the `search` + `get` workflow.
 | `--outdir` | Write each document to a separate file under this directory |
 | `--frontmatter` | Prepend YAML frontmatter to content (`--format=text` only; incompatible with `--size-only`) |
 | `--size-only` | Print document sizes only, suppress content |
+| `--view` | Document view: `basic` (metadata only, no content), `full`, or `content` (default is set by the API) |
 
 ### `create-api-key`
 

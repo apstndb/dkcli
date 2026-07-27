@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -12,10 +12,14 @@ import (
 var (
 	frontmatter bool
 	sizeOnly    bool
+	docView     string
 )
 
 const getFrontmatterTextFormatError = "--frontmatter is only supported with --format=text"
 const getFrontmatterSizeOnlyError = "--frontmatter is not supported with --size-only"
+
+// docViewFlagUsage documents --view for the commands that retrieve documents.
+const docViewFlagUsage = "document view: basic (metadata only, no content), full, or content (default is set by the API)"
 
 var getCmd = &cobra.Command{
 	Use:   "get <document-name>",
@@ -33,6 +37,7 @@ The document name can be specified as:
 func init() {
 	getCmd.Flags().BoolVar(&frontmatter, "frontmatter", false, "prepend YAML frontmatter to content (--format=text only; incompatible with --size-only)")
 	getCmd.Flags().BoolVar(&sizeOnly, "size-only", false, "print document size only, suppress content (API calls still occur)")
+	getCmd.Flags().StringVar(&docView, "view", "", docViewFlagUsage)
 	rootCmd.AddCommand(getCmd)
 }
 
@@ -89,6 +94,15 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return errors.New(getFrontmatterTextFormatError)
 	}
 
+	view, err := parseDocumentView(docView)
+	if err != nil {
+		return err
+	}
+	if err := validateDocumentViewOutput(view, outputFormat, sizeOnly, frontmatter); err != nil {
+		return err
+	}
+	opts := documentViewOptions(view)
+
 	name := normalizeDocName(args[0])
 	if name == "" {
 		return errors.New("invalid document name")
@@ -98,15 +112,11 @@ func runGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	body, err := client.fetchDocument(name)
+	fetched, err := client.fetchDocument(name, opts...)
 	if err != nil {
 		return err
 	}
-
-	var doc Document
-	if err := json.Unmarshal(body, &doc); err != nil {
-		return err
-	}
+	doc := *fetched
 
 	if sizeOnly || outputFormat == "text" {
 		printDocSummary(cmd.ErrOrStderr(), &doc)
@@ -142,7 +152,8 @@ func runGet(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func (c *apiClient) fetchDocument(name string) ([]byte, error) {
-	url := c.baseURL + "/" + name
-	return c.doGet(url)
+// fetchDocument retrieves a single document through the shared client so the
+// rate limiter, retries, and document-view options apply.
+func (c *apiClient) fetchDocument(name string, opts ...dkapi.DocumentOption) (*Document, error) {
+	return c.newDKClient().GetDocument(c.requestContext(), name, opts...)
 }
