@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -98,6 +100,34 @@ func TestFetchSearchPage_WithFilter(t *testing.T) {
 	_, err := client.fetchSearchPage("test", 0, "", `data_source="docs.cloud.google.com"`)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSearchStructuredOutputRetainsRelevanceScore(t *testing.T) {
+	t.Parallel()
+
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"results":[{"parent":"documents/example.com/a","id":"c1","content":"body","relevanceScore":0.875}]}`)
+	}))
+
+	resp, err := client.fetchSearchPage("relevance", 0, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("results = %d, want 1", len(resp.Results))
+	}
+	if resp.Results[0].RelevanceScore != 0.875 {
+		t.Fatalf("relevanceScore = %v, want 0.875", resp.Results[0].RelevanceScore)
+	}
+
+	var buf bytes.Buffer
+	if err := writeFormatted(&buf, "json", resp); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `"relevanceScore": 0.875`) {
+		t.Fatalf("structured output = %s, want relevanceScore", buf.String())
 	}
 }
 

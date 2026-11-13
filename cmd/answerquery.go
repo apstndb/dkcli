@@ -1,12 +1,14 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
+	dkapi "github.com/apstndb/developerknowledge-go"
 	"github.com/spf13/cobra"
 )
+
+var answerQueryFilter string
 
 var answerQueryCmd = &cobra.Command{
 	Use:   "answer-query <query>...",
@@ -17,66 +19,28 @@ This GA endpoint returns generated text with citations and references to source
 document chunks. Text output prints the answer followed by source references;
 structured output includes the full answer payload.
 
+--filter sends an AIP-160 filter string verbatim. Filter field names use
+snake_case, such as data_source and content_length_bytes, which is independent
+of the camelCase JSON names on document objects.
+
 If an API key is configured, dkcli uses it. Otherwise it falls back to ADC.`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runAnswerQuery,
 }
 
 func init() {
+	answerQueryCmd.Flags().StringVar(&answerQueryFilter, "filter", "", "AIP-160 filter on document metadata, sent verbatim")
 	rootCmd.AddCommand(answerQueryCmd)
 }
 
-type answerQueryRequest struct {
-	Query string `json:"query"`
+func (c *apiClient) answerQuery(query, filter string) (*dkapi.AnswerQueryResponse, error) {
+	return c.newDKClient().AnswerQuery(c.requestContext(), &dkapi.AnswerQueryRequest{
+		Query:  query,
+		Filter: filter,
+	})
 }
 
-type Answer struct {
-	AnswerText string            `json:"answerText" yaml:"answer_text"`
-	Citations  []AnswerCitation  `json:"citations,omitempty" yaml:"citations,omitempty"`
-	References []AnswerReference `json:"references,omitempty" yaml:"references,omitempty"`
-}
-
-type AnswerCitation struct {
-	StartIndex int              `json:"startIndex" yaml:"start_index"`
-	EndIndex   int              `json:"endIndex" yaml:"end_index"`
-	Sources    []CitationSource `json:"sources,omitempty" yaml:"sources,omitempty"`
-}
-
-type CitationSource struct {
-	ReferenceIndex int `json:"referenceIndex" yaml:"reference_index"`
-}
-
-type AnswerReference struct {
-	DocumentReference *DocumentReference `json:"documentReference,omitempty" yaml:"document_reference,omitempty"`
-}
-
-type DocumentReference struct {
-	DocumentChunk *DocumentChunk `json:"documentChunk,omitempty" yaml:"document_chunk,omitempty"`
-}
-
-type answerQueryResponse struct {
-	Answer Answer `json:"answer" yaml:"answer"`
-}
-
-func (c *apiClient) answerQuery(query string) (*answerQueryResponse, error) {
-	reqBody, err := json.Marshal(answerQueryRequest{Query: query})
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.doJSONPost(c.baseURL+":answerQuery", reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	var resp answerQueryResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-func formatAnswerText(answer *Answer) string {
+func formatAnswerText(answer *dkapi.Answer) string {
 	if answer == nil {
 		return ""
 	}
@@ -132,7 +96,7 @@ func runAnswerQuery(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	resp, err := client.answerQuery(strings.Join(args, " "))
+	resp, err := client.answerQuery(strings.Join(args, " "), answerQueryFilter)
 	if err != nil {
 		return err
 	}
@@ -144,10 +108,10 @@ func runAnswerQuery(cmd *cobra.Command, args []string) error {
 
 	switch outputFormat {
 	case "text":
-		_, err = fmt.Fprint(w, formatAnswerText(&resp.Answer))
+		_, err = fmt.Fprint(w, formatAnswerText(resp.Answer))
 		return finishOutput(err, closer)
 	case "txtar":
-		_, err = fmt.Fprint(w, txtarEntry("answer.txt", formatAnswerText(&resp.Answer)))
+		_, err = fmt.Fprint(w, txtarEntry("answer.txt", formatAnswerText(resp.Answer)))
 		return finishOutput(err, closer)
 	default:
 		return finishOutput(writeFormatted(w, outputFormat, resp), closer)

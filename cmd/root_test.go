@@ -407,20 +407,20 @@ func TestYAMLTagsUseSnakeCase(t *testing.T) {
 		"search": searchResponse{
 			NextPageToken: "next-token",
 		},
-		"answer": answerQueryResponse{
-			Answer: Answer{
+		"answer": dkapi.AnswerQueryResponse{
+			Answer: &dkapi.Answer{
 				AnswerText: "grounded",
-				Citations: []AnswerCitation{{
+				Citations: []dkapi.AnswerCitation{{
 					StartIndex: 0,
 					EndIndex:   8,
-					Sources:    []CitationSource{{ReferenceIndex: 0}},
+					Sources:    []dkapi.CitationSource{{ReferenceIndex: 0}},
 				}},
-				References: []AnswerReference{{
-					DocumentReference: &DocumentReference{
-						DocumentChunk: &DocumentChunk{
+				References: []dkapi.AnswerReference{{
+					DocumentReference: &dkapi.DocumentReference{
+						DocumentChunk: &dkapi.DocumentChunk{
 							Parent: "documents/example.com/a",
 							ID:     "chunk-1",
-							Document: &Document{
+							Document: &dkapi.Document{
 								DataSource: "example.com",
 								UpdateTime: "2026-04-18T00:00:00Z",
 							},

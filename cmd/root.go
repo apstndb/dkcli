@@ -179,10 +179,6 @@ func (c *apiClient) doGet(url string) ([]byte, error) {
 	return c.doAPIRequest(http.MethodGet, url, nil, "")
 }
 
-func (c *apiClient) doJSONPost(url string, body []byte) ([]byte, error) {
-	return c.doAPIRequest(http.MethodPost, url, body, "application/json")
-}
-
 func normalizeDocName(name string) string {
 	return dkapi.NormalizeDocName(name)
 }

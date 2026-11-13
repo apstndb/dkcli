@@ -42,11 +42,13 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          # Module compatibility stays at go 1.25. Go 1.25.14 govulncheck v1.6.0
+          # reports standard-library advisories fixed in newer Go releases.
+          go-version: "1.27"
           check-latest: true
 
       # Keep this inline pin current manually; Dependabot does not update go run pins.
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   cross-build:
     runs-on: ubuntu-latest

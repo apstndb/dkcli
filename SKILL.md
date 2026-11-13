@@ -55,7 +55,9 @@ dkcli can search and retrieve documents from the following domains only.
 | firebase.google.com | Firebase |
 | fuchsia.dev | Fuchsia OS |
 | geminicli.com | Gemini CLI |
+| genkit.dev | Genkit |
 | go.dev | Go |
+| knowledge.workspace.google.com | Google Workspace knowledge |
 | mapsplatform.google.com | Google Maps Platform |
 | web.dev | Web development best practices |
 | www.tensorflow.org | TensorFlow |
@@ -168,6 +170,9 @@ For a quick generated answer instead of raw document content, use:
 
 ```bash
 dkcli answer-query "How do I create a Cloud Storage bucket?"
+
+# Keep the filter string verbatim. Use snake_case field names.
+dkcli answer-query --filter 'data_source = "docs.cloud.google.com"' "How do I create a Cloud Storage bucket?"
 ```
 
 This command calls the GA `v1:answerQuery` endpoint. It works with an API key,
@@ -286,7 +291,7 @@ Note: `get`, `batch-get`, and `answer-query` use GA `v1` endpoints.
 | `-o <file>` | Write to file |
 | `--page-size N` | Results per page for search (max 100) |
 | `--max-pages N` | Max pages with `-a` (default 5) |
-| `--filter <expr>` | Filter search results by document metadata |
+| `--filter <expr>` | AIP-160 metadata filter for `search` and `answer-query`, sent verbatim |
 | `--outdir <dir>` | Write each doc to separate files (batch-get) |
 | `--view basic\|full\|content` | Document view for get/batch-get; `basic` returns metadata only (no content) |
 | `--frontmatter` | Prepend YAML frontmatter to `--format=text` output (get, batch-get; `get` does not support it with `--size-only`) |
