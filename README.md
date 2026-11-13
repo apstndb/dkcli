@@ -101,11 +101,16 @@ a quota project is available.
 
 ```
 dkcli answer-query "How do I create a Cloud Storage bucket?"
+
+# Optional AIP-160 filter. The string is sent verbatim. Field names in the
+# filter use snake_case, not the camelCase JSON names.
+dkcli answer-query --filter 'data_source = "docs.cloud.google.com"' "How do I create a Cloud Storage bucket?"
 ```
 
 The text output prints the generated answer followed by source references when
 the API returns them. Structured formats include the full `answer` payload,
-including citation spans and referenced document chunks.
+including citation spans, referenced document chunks, and `relevanceScore`
+when the API provides it.
 
 For full-document verification, prefer the `search` + `get` workflow.
 
@@ -127,7 +132,7 @@ For full-document verification, prefer the `search` + `get` workflow.
 | `--page-token` | Pagination token from previous response |
 | `--auto-paging`, `-a` | Automatically fetch subsequent pages |
 | `--max-pages` | Max pages to fetch with `--auto-paging` (default: 5, 0 for unlimited) |
-| `--filter` | AIP-160 filter on document metadata |
+| `--filter` | AIP-160 filter on document metadata, sent verbatim |
 
 ### `get`
 
@@ -145,6 +150,12 @@ For full-document verification, prefer the `search` + `get` workflow.
 | `--frontmatter` | Prepend YAML frontmatter to content (`--format=text` only; incompatible with `--size-only`) |
 | `--size-only` | Print document sizes only, suppress content |
 | `--view` | Document view: `basic` (metadata only, no content), `full`, or `content` (default is set by the API) |
+
+### `answer-query`
+
+| Flag | Description |
+|------|-------------|
+| `--filter` | AIP-160 filter on document metadata, sent verbatim. Examples use `data_source`, `content_length_bytes`, `update_time`, and `uri`. |
 
 ### `create-api-key`
 
